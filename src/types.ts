@@ -71,3 +71,22 @@ export interface AidStation {
   distanceFromStart: number;  // meters
   name: string;               // "Ravito 1", "Ravito 2", ...
 }
+
+export type FoodItemType = 'flask' | 'gel' | 'bar';
+
+export interface FoodItem {
+  id: string;
+  type: FoodItemType;
+  name: string;
+  hasPowder: boolean;  // only meaningful for flask
+  carbsG: number;      // g per unit (0 if flask without powder)
+  sodiumMg: number;    // mg per unit (0 if flask without powder)
+  waterMl: number;     // 500 for flask, 0 for gel/bar
+}
+
+export interface LegFoodAssignment {
+  foodItemId: string;
+  quantity: number;
+}
+
+export type LegNutritionPlan = Record<string, LegFoodAssignment[]>;

@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
 import type { Section, ProfilePoint } from '../types';
+import { Slider } from '@/components/ui/slider';
 
 interface Props {
   sections: Section[];
@@ -154,10 +155,12 @@ export function RunWalkAnalysis({ sections, profilePoints }: Props) {
           <label className="text-sm text-gray-400">Seuil de marche</label>
           <span className="text-sm font-semibold" style={{ color: WALK_COLOR }}>≥ {threshold}%</span>
         </div>
-        <input
-          type="range" min={5} max={30} step={1} value={threshold}
-          onChange={(e) => setThreshold(Number(e.target.value))}
-          style={{ accentColor: '#4AADAD' }}
+        <Slider
+          min={5}
+          max={30}
+          step={1}
+          value={[threshold]}
+          onValueChange={(vals) => setThreshold(vals[0])}
           className="w-full"
         />
         <div className="flex justify-between text-[11px] text-gray-600">

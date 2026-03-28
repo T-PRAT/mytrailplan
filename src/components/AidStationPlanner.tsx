@@ -1,8 +1,26 @@
-import { useMemo, useRef, useState } from 'react';
-import type { AidStation, ProfilePoint, Section } from '../types';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { RotateCcw, Trash2, X } from 'lucide-react';
+import type { AidStation, FoodItem, LegNutritionPlan, ProfilePoint, Section } from '../types';
 import {
   formatPace, formatTime, gapPaceFromTime, parseDuration, simulateGap,
 } from '../lib/gapCalculation';
+import { computeLegNutrition, loadFoodLibrary, saveFoodLibrary } from './aid-station/nutrition-utils';
+import { FoodLibrary } from './aid-station/FoodLibrary';
+import { LegNutritionPanel } from './aid-station/LegNutritionPanel';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { NumberStepper } from '@/components/ui/number-stepper';
+import { Slider } from '@/components/ui/slider';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
 interface Props {
   sections: Section[];
@@ -39,15 +57,26 @@ const VIEW_H_PROFILE = 230;
 const CHART_W = VIEW_W - PAD_LEFT - PAD_RIGHT;
 const CHART_H = VIEW_H_PROFILE - PAD_TOP - PAD_BOTTOM;
 
-const VIEW_H_BAR = 90;
+const VIEW_H_BAR = 150;
 const BAR_PAD_TOP = 22;
-const BAR_H = 34;
+const BAR_H = 96;
 
 const DEFAULT_GAP_PACE = 360;
 const SLIDER_MIN = 180;
 const SLIDER_MAX = 1200;
 
 const AID_COLORS = ['#2E6B8A', '#4AADAD', '#7DCFB6', '#5B8DB8', '#3D8B9E'];
+
+/** Centre une icône Lucide 24×24 sur (cx, cy) en SVG viewBox units */
+function lucideAt(cx: number, cy: number, scale = 0.46): string {
+  return `translate(${cx - 12 * scale}, ${cy - 12 * scale}) scale(${scale})`;
+}
+
+function formatDuration(secs: number): string {
+  const h = Math.floor(secs / 3600);
+  const m = Math.floor((secs % 3600) / 60);
+  return `${h}:${String(m).padStart(2, '0')}`;
+}
 
 function computeLegs(
   sections: Section[],
@@ -109,6 +138,16 @@ export function AidStationPlanner({ sections, profilePoints, totalDistance, slop
   const [hover, setHover] = useState<HoverState | null>(null);
   const [dragId, setDragId] = useState<string | null>(null);
   const [hoveredLegIdx, setHoveredLegIdx] = useState<number | null>(null);
+  const [carbsPerHour, setCarbsPerHour] = useState(60);
+  const [waterPerHour, setWaterPerHour] = useState(500);
+  const [sodiumPerHour, setSodiumPerHour] = useState(500);
+  const [selectedLegIdx, setSelectedLegIdx] = useState<number | null>(null);
+  const [foodLibrary, setFoodLibrary] = useState<FoodItem[]>(() => loadFoodLibrary());
+  const [legNutritionPlan, setLegNutritionPlan] = useState<LegNutritionPlan>({});
+  const [timeOverrides, setTimeOverrides] = useState<Record<string, number>>({});
+
+  useEffect(() => { saveFoodLibrary(foodLibrary); }, [foodLibrary]);
+  const [confirmDeleteStationId, setConfirmDeleteStationId] = useState<string | null>(null);
   const svgRef = useRef<SVGSVGElement>(null);
   const didDragRef = useRef(false);
 
@@ -125,6 +164,17 @@ export function AidStationPlanner({ sections, profilePoints, totalDistance, slop
     if (!gapPace) return [];
     return computeLegs(sections, profilePoints, aidStations, totalDistance, gapPace);
   }, [sections, profilePoints, aidStations, totalDistance, gapPace]);
+
+  const effectiveLegs = useMemo(() => {
+    if (legs.length === 0) return legs;
+    const sorted = [...aidStations].sort((a, b) => a.distanceFromStart - b.distanceFromStart);
+    const withTimes = legs.map((leg, i) => {
+      const key = i === 0 ? 'depart' : (sorted[i - 1]?.id ?? `leg_${i}`);
+      return { ...leg, time: timeOverrides[key] ?? leg.time };
+    });
+    let cum = 0;
+    return withTimes.map(leg => { cum += leg.time; return { ...leg, cumulativeTime: cum }; });
+  }, [legs, timeOverrides, aidStations]);
 
   if (profilePoints.length < 2) return null;
 
@@ -282,11 +332,54 @@ export function AidStationPlanner({ sections, profilePoints, totalDistance, slop
 
   const sortedStations = [...aidStations].sort((a, b) => a.distanceFromStart - b.distanceFromStart);
 
+  function setTimeOverride(key: string, raw: string) {
+    const secs = parseDuration(raw);
+    if (secs !== null && secs > 0) setTimeOverrides(prev => ({ ...prev, [key]: secs }));
+  }
+
+  function resetTimeOverride(key: string) {
+    setTimeOverrides(prev => { const next = { ...prev }; delete next[key]; return next; });
+  }
+
+  function legKey(legIdx: number): string {
+    return legIdx === 0 ? 'depart' : (sortedStations[legIdx - 1]?.id ?? `leg_${legIdx}`);
+  }
+
+  function addFoodToLeg(key: string, foodItemId: string) {
+    setLegNutritionPlan(prev => {
+      const list = prev[key] ?? [];
+      const idx = list.findIndex(a => a.foodItemId === foodItemId);
+      if (idx >= 0) {
+        return { ...prev, [key]: list.map((a, i) => i === idx ? { ...a, quantity: a.quantity + 1 } : a) };
+      }
+      return { ...prev, [key]: [...list, { foodItemId, quantity: 1 }] };
+    });
+  }
+
+  function removeFoodFromLeg(key: string, foodItemId: string) {
+    setLegNutritionPlan(prev => {
+      const list = prev[key] ?? [];
+      const idx = list.findIndex(a => a.foodItemId === foodItemId);
+      if (idx < 0) return prev;
+      if (list[idx].quantity <= 1) {
+        const next = list.filter((_, i) => i !== idx);
+        if (next.length === 0) { const p = { ...prev }; delete p[key]; return p; }
+        return { ...prev, [key]: next };
+      }
+      return { ...prev, [key]: list.map((a, i) => i === idx ? { ...a, quantity: a.quantity - 1 } : a) };
+    });
+  }
+
   const profileCursor = dragId ? 'grabbing' : 'crosshair';
   const tooltipOnLeft = hover ? hover.svgX > VIEW_W / 2 : false;
 
   // --- Bar chart ---
-  const totalTime = legs.reduce((s, l) => s + l.time, 0);
+  const totalTime = effectiveLegs.reduce((s, l) => s + l.time, 0);
+
+  // Station pending delete (for AlertDialog)
+  const stationToDelete = confirmDeleteStationId
+    ? sortedStations.find(s => s.id === confirmDeleteStationId) ?? null
+    : null;
 
   return (
     <div className="bg-gray-900 rounded-xl border border-gray-700 p-6 flex flex-col gap-5">
@@ -298,20 +391,24 @@ export function AidStationPlanner({ sections, profilePoints, totalDistance, slop
       {/* Contrôles VAP/durée */}
       <div className="flex flex-col gap-3">
         <div className="flex items-center gap-1 bg-gray-800 rounded-lg p-1 w-fit">
-          <button
+          <Button
+            variant="ghost"
+            size="sm"
             onClick={() => setMode('vap')}
-            className={['px-3 py-1 rounded-md text-sm font-medium transition-colors',
-              mode === 'vap' ? 'bg-gray-700 text-gray-100' : 'text-gray-500 hover:text-gray-300'].join(' ')}
+            className={['px-3 py-1 rounded-md text-sm font-medium h-auto transition-colors',
+              mode === 'vap' ? 'bg-gray-700 text-gray-100 hover:bg-gray-700 hover:text-gray-100' : 'text-gray-500 hover:text-gray-300 hover:bg-transparent'].join(' ')}
           >
             VAP cible
-          </button>
-          <button
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
             onClick={() => setMode('duration')}
-            className={['px-3 py-1 rounded-md text-sm font-medium transition-colors',
-              mode === 'duration' ? 'bg-gray-700 text-gray-100' : 'text-gray-500 hover:text-gray-300'].join(' ')}
+            className={['px-3 py-1 rounded-md text-sm font-medium h-auto transition-colors',
+              mode === 'duration' ? 'bg-gray-700 text-gray-100 hover:bg-gray-700 hover:text-gray-100' : 'text-gray-500 hover:text-gray-300 hover:bg-transparent'].join(' ')}
           >
             Durée cible
-          </button>
+          </Button>
         </div>
 
         {mode === 'vap' ? (
@@ -322,10 +419,12 @@ export function AidStationPlanner({ sections, profilePoints, totalDistance, slop
                 {formatPace(sliderPace)}<span className="text-gray-500 font-normal"> /km</span>
               </span>
             </div>
-            <input type="range" min={SLIDER_MIN} max={SLIDER_MAX} step={5}
-              value={sliderPace}
-              onChange={e => setSliderPace(Number(e.target.value))}
-              style={{ accentColor: '#F0EDE5' }}
+            <Slider
+              min={SLIDER_MIN}
+              max={SLIDER_MAX}
+              step={5}
+              value={[sliderPace]}
+              onValueChange={vals => setSliderPace(vals[0])}
               className="w-full"
             />
             <div className="flex justify-between text-[11px] text-gray-600">
@@ -336,13 +435,14 @@ export function AidStationPlanner({ sections, profilePoints, totalDistance, slop
         ) : (
           <div className="flex items-center gap-3">
             <label className="text-sm text-gray-400 shrink-0">Durée estimée</label>
-            <input
-              type="text" value={durationInput}
+            <Input
+              type="text"
+              value={durationInput}
               onChange={e => setDurationInput(e.target.value)}
               placeholder="ex: 4:30 ou 4h30"
               maxLength={10}
-              className={['w-36 bg-gray-800 rounded-lg px-3 py-1.5 text-sm text-gray-100 outline-none border',
-                durationInvalid ? 'border-red-700 focus:border-red-500' : 'border-gray-700 focus:border-gray-500'].join(' ')}
+              className={['w-36 bg-gray-800 text-gray-100 border h-auto py-1.5 text-sm',
+                durationInvalid ? 'border-red-700 focus-visible:ring-red-500' : 'border-gray-700'].join(' ')}
             />
             {parsedDuration && gapPace && (
               <span className="text-sm text-gray-500">
@@ -364,6 +464,37 @@ export function AidStationPlanner({ sections, profilePoints, totalDistance, slop
             </div>
           </div>
         )}
+      </div>
+
+      {/* Objectifs nutrition */}
+      <div className="flex flex-col gap-3">
+        <h3 className="text-sm font-medium text-gray-400">Objectifs nutrition</h3>
+        <div className="flex items-center flex-wrap gap-0 divide-x divide-gray-700">
+          {[
+            { label: 'Glucides', value: carbsPerHour, onChange: setCarbsPerHour, unit: 'g/h', min: 30, max: 120, step: 5 },
+            { label: 'Eau', value: waterPerHour, onChange: setWaterPerHour, unit: 'mL/h', min: 100, max: 1500, step: 50 },
+            { label: 'Sodium', value: sodiumPerHour, onChange: setSodiumPerHour, unit: 'mg/h', min: 100, max: 1500, step: 50 },
+          ].map(({ label, value, onChange, unit, min, max, step }) => (
+            <div key={label} className="flex items-center gap-1.5 px-3 first:pl-0 last:pr-0">
+              <span className="text-sm text-gray-400">{label}</span>
+              <NumberStepper
+                value={value}
+                onChange={onChange}
+                min={min}
+                max={max}
+                step={step}
+                unit={unit}
+                inputClassName="w-16"
+              />
+            </div>
+          ))}
+        </div>
+        <FoodLibrary
+          foodLibrary={foodLibrary}
+          setFoodLibrary={setFoodLibrary}
+          legNutritionPlan={legNutritionPlan}
+          setLegNutritionPlan={setLegNutritionPlan}
+        />
       </div>
 
       {/* Profil altimétrique */}
@@ -418,6 +549,7 @@ export function AidStationPlanner({ sections, profilePoints, totalDistance, slop
         {sortedStations.map(s => {
           const x = toX(s.distanceFromStart);
           const isDragging = dragId === s.id;
+          const label = s.name.length > 10 ? s.name.slice(0, 9) + '…' : s.name;
           return (
             <g key={s.id}>
               <circle cx={x} cy={PAD_TOP - 1} r={8}
@@ -425,9 +557,9 @@ export function AidStationPlanner({ sections, profilePoints, totalDistance, slop
                 style={{ cursor: isDragging ? 'grabbing' : 'grab' }}
                 onMouseDown={e => handleMarkerMouseDown(e, s.id)}
               />
-              <text x={x} y={PAD_TOP - 13} textAnchor="middle" fontSize={10} fill="#E07B4F"
+              <text x={x} y={PAD_TOP + 12} textAnchor="middle" fontSize={10} fill="#E07B4F"
                 style={{ pointerEvents: 'none' }}>
-                {s.name}
+                {label}
               </text>
             </g>
           );
@@ -488,40 +620,95 @@ export function AidStationPlanner({ sections, profilePoints, totalDistance, slop
           <g clipPath="url(#aid-bar-area)">
             {(() => {
               let xCursor = PAD_LEFT;
-              return legs.map((leg, li) => {
+              return effectiveLegs.map((leg, li) => {
+                const legKey = li === 0 ? 'depart' : (sortedStations[li - 1]?.id ?? `leg_${li}`);
+                const isTimeOverridden = legKey in timeOverrides;
                 const w = (leg.time / totalTime) * CHART_W;
                 const isHovered = hoveredLegIdx === li;
                 const color = AID_COLORS[li % AID_COLORS.length];
                 const x = xCursor;
                 xCursor += w;
                 const isFirst = li === 0;
-                const isLast = li === legs.length - 1;
+                const isLast = li === effectiveLegs.length - 1;
                 return (
                   <g key={li}
                     onMouseEnter={() => setHoveredLegIdx(li)}
                     onMouseLeave={() => setHoveredLegIdx(null)}
-                    style={{ cursor: 'default' }}
+                    onClick={() => { setSelectedLegIdx(li === selectedLegIdx ? null : li); setConfirmDeleteStationId(null); }}
+                    style={{ cursor: 'pointer' }}
                   >
                     {/* Bar segment */}
                     <rect x={x} y={BAR_PAD_TOP} width={w} height={BAR_H}
                       fill={color}
-                      fillOpacity={isHovered ? 1 : 0.65}
+                      fillOpacity={isHovered || selectedLegIdx === li ? 1 : 0.65}
                       rx={isFirst ? 4 : 0}
                       style={isLast ? { borderRadius: '0 4px 4px 0' } : {}}
                     />
+                    {/* Bordure segment sélectionné */}
+                    {selectedLegIdx === li && (
+                      <rect x={x + 1} y={BAR_PAD_TOP + 1} width={w - 2} height={BAR_H - 2}
+                        fill="none" stroke="#F0EDE5" strokeWidth={1.5} strokeOpacity={0.5}
+                        rx={isFirst ? 3 : 0}
+                        style={{ pointerEvents: 'none' }}
+                      />
+                    )}
                     {/* Séparateur vertical */}
                     {!isFirst && (
                       <line x1={x} y1={BAR_PAD_TOP} x2={x} y2={BAR_PAD_TOP + BAR_H}
                         stroke="#161614" strokeWidth={1.5} />
                     )}
-                    {/* Label dans la barre */}
-                    {w > 55 && (
-                      <text x={x + w / 2} y={BAR_PAD_TOP + BAR_H / 2 + 4}
-                        textAnchor="middle" fontSize={11} fill="#F0EDE5" fontWeight="600"
-                        style={{ pointerEvents: 'none' }}>
-                        {formatTime(leg.time)}
-                      </text>
-                    )}
+                    {(() => {
+                      const assignments = legNutritionPlan[legKey] ?? [];
+                      const nutrition = computeLegNutrition(assignments, foodLibrary);
+                      const hasNutrition = assignments.length > 0;
+                      const distKm = (leg.distance / 1000).toFixed(1);
+                      const gain = Math.round(leg.elevGain);
+                      const cx = x + w / 2;
+                      return (
+                        <>
+                          {/* Temps */}
+                          {w > 45 && (
+                            <text x={cx} y={BAR_PAD_TOP + 22}
+                              textAnchor="middle" fontSize={13} fill={isTimeOverridden ? '#FCD34D' : '#F0EDE5'} fontWeight="700"
+                              style={{ pointerEvents: 'none' }}>
+                              {formatTime(leg.time)}
+                            </text>
+                          )}
+                          {/* Distance + D+ */}
+                          {w > 70 && (
+                            <text x={cx} y={BAR_PAD_TOP + 40}
+                              textAnchor="middle" fontSize={10} fill="rgba(240,237,229,0.55)"
+                              style={{ pointerEvents: 'none' }}>
+                              {distKm} km · +{gain} m
+                            </text>
+                          )}
+                          {/* Glucides */}
+                          {w > 70 && (
+                            <text x={cx} y={BAR_PAD_TOP + 58}
+                              textAnchor="middle" fontSize={10} fill={hasNutrition ? '#FBBF24' : 'rgba(251,191,36,0.35)'}
+                              style={{ pointerEvents: 'none' }}>
+                              {hasNutrition ? `${nutrition.carbs} g glucides` : '— glucides'}
+                            </text>
+                          )}
+                          {/* Eau */}
+                          {w > 70 && (
+                            <text x={cx} y={BAR_PAD_TOP + 73}
+                              textAnchor="middle" fontSize={10} fill={hasNutrition ? '#60A5FA' : 'rgba(96,165,250,0.35)'}
+                              style={{ pointerEvents: 'none' }}>
+                              {hasNutrition ? `${nutrition.water} mL eau` : '— mL eau'}
+                            </text>
+                          )}
+                          {/* Sodium */}
+                          {w > 70 && (
+                            <text x={cx} y={BAR_PAD_TOP + 88}
+                              textAnchor="middle" fontSize={10} fill={hasNutrition ? '#C084FC' : 'rgba(192,132,252,0.35)'}
+                              style={{ pointerEvents: 'none' }}>
+                              {hasNutrition ? `${nutrition.sodium} mg Na` : '— mg Na'}
+                            </text>
+                          )}
+                        </>
+                      );
+                    })()}
                     {/* Nom du point d'arrivée (au-dessus) */}
                     {w > 40 && (
                       <text x={x + w / 2} y={BAR_PAD_TOP - 6}
@@ -536,6 +723,39 @@ export function AidStationPlanner({ sections, profilePoints, totalDistance, slop
                       style={{ pointerEvents: 'none' }}>
                       {formatTime(leg.cumulativeTime)}
                     </text>
+                    {/* Stylo (haut-gauche) — indique l'édition au clic */}
+                    {w > 45 && (
+                      <g transform={lucideAt(x + 10, BAR_PAD_TOP + 9)}
+                        style={{ pointerEvents: 'none' }}>
+                        <path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"
+                          fill="none" stroke="rgba(240,237,229,0.32)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                        <path d="m15 5 4 4"
+                          fill="none" stroke="rgba(240,237,229,0.32)" strokeWidth="2" strokeLinecap="round" />
+                      </g>
+                    )}
+                    {/* Poubelle (haut-droite) — Lucide Trash2 */}
+                    {(() => {
+                      const endStation = leg.toName !== 'Arrivée'
+                        ? sortedStations.find(s => s.name === leg.toName)
+                        : null;
+                      if (!endStation || w < 18) return null;
+                      const isConfirming = confirmDeleteStationId === endStation.id;
+                      const stroke = isConfirming ? '#EF4444' : 'rgba(240,237,229,0.38)';
+                      const cx = x + w - 10;
+                      const cy = BAR_PAD_TOP + 9;
+                      return (
+                        <g transform={lucideAt(cx, cy)}
+                          onClick={e => { e.stopPropagation(); setConfirmDeleteStationId(isConfirming ? null : endStation.id); }}
+                          style={{ cursor: 'pointer' }}>
+                          <rect x={-2} y={-2} width={28} height={28} fill="transparent" />
+                          <path d="M3 6h18" fill="none" stroke={stroke} strokeWidth="2" strokeLinecap="round" />
+                          <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" fill="none" stroke={stroke} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                          <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" fill="none" stroke={stroke} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                          <line x1="10" y1="11" x2="10" y2="17" stroke={stroke} strokeWidth="2" strokeLinecap="round" />
+                          <line x1="14" y1="11" x2="14" y2="17" stroke={stroke} strokeWidth="2" strokeLinecap="round" />
+                        </g>
+                      );
+                    })()}
                   </g>
                 );
               });
@@ -549,104 +769,135 @@ export function AidStationPlanner({ sections, profilePoints, totalDistance, slop
         </svg>
       )}
 
-      {/* Tooltip de tronçon survolé */}
-      {hoveredLegIdx !== null && legs[hoveredLegIdx] && gapPace && (() => {
-        const leg = legs[hoveredLegIdx];
-        const avgPace = leg.time > 0 && leg.distance > 0
-          ? leg.time / (leg.distance / 1000)
-          : null;
+      {/* AlertDialog for delete confirmation */}
+      <AlertDialog open={!!confirmDeleteStationId} onOpenChange={(open) => { if (!open) setConfirmDeleteStationId(null); }}>
+        <AlertDialogContent className="bg-gray-900 border-gray-700 text-gray-100">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-gray-100">Supprimer le ravitaillement</AlertDialogTitle>
+            <AlertDialogDescription className="text-gray-400">
+              Supprimer <span className="font-semibold text-gray-200">{stationToDelete?.name}</span> ?
+              Cette action est irréversible.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="bg-gray-800 border-gray-700 text-gray-300 hover:bg-gray-700 hover:text-gray-100">
+              Annuler
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (confirmDeleteStationId) {
+                  deleteStation(confirmDeleteStationId);
+                  setConfirmDeleteStationId(null);
+                  setSelectedLegIdx(null);
+                }
+              }}
+              className="bg-red-900 text-red-100 hover:bg-red-800 border-0"
+            >
+              Supprimer
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Panneau d'édition du tronçon sélectionné */}
+      {selectedLegIdx !== null && effectiveLegs[selectedLegIdx] && (() => {
+        const leg = effectiveLegs[selectedLegIdx];
+        const predictedTime = legs[selectedLegIdx]?.time ?? leg.time;
+        const key = legKey(selectedLegIdx);
+        const isTimeOvr = key in timeOverrides;
+        const avgPace = leg.time > 0 && leg.distance > 0 ? leg.time / (leg.distance / 1000) : null;
+        const endStation = leg.toName !== 'Arrivée' ? sortedStations.find(s => s.name === leg.toName) : null;
+
         return (
-          <div className="bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 flex gap-6 text-sm">
-            <div>
-              <p className="text-[11px] text-gray-500 uppercase tracking-wide mb-0.5">Tronçon</p>
-              <p className="font-semibold text-gray-100">{leg.fromName} → {leg.toName}</p>
-            </div>
-            <div>
-              <p className="text-[11px] text-gray-500 uppercase tracking-wide mb-0.5">Distance</p>
-              <p className="font-semibold text-gray-100">{(leg.distance / 1000).toFixed(1)} km</p>
-            </div>
-            <div>
-              <p className="text-[11px] text-gray-500 uppercase tracking-wide mb-0.5">D+ / D−</p>
-              <p className="font-semibold text-gray-100">
-                +{Math.round(leg.elevGain)} m / −{Math.round(leg.elevLoss)} m
+          <div className="bg-gray-800 border border-gray-600 rounded-xl p-4 flex flex-col gap-4">
+            {/* Header */}
+            <div className="flex items-center justify-between">
+              <p className="font-semibold text-gray-100 text-sm">
+                <span className="text-gray-400">{leg.fromName}</span>
+                <span className="text-gray-600 mx-2">→</span>
+                <span className="text-gray-200">{leg.toName}</span>
               </p>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setSelectedLegIdx(null)}
+                className="h-6 w-6 text-gray-500 hover:text-gray-300"
+              >
+                <X size={14} />
+              </Button>
             </div>
-            <div>
-              <p className="text-[11px] text-gray-500 uppercase tracking-wide mb-0.5">Temps</p>
-              <p className="font-semibold text-gray-100">{formatTime(leg.time)}</p>
+
+            {/* Stats */}
+            <div className="flex flex-wrap gap-4 text-sm">
+              <span className={isTimeOvr ? 'text-amber-300 font-medium' : 'text-gray-200 font-medium'}>{formatTime(leg.time)}</span>
+              <span className="text-gray-500">{(leg.distance / 1000).toFixed(1)} km</span>
+              <span className="text-gray-500">+{Math.round(leg.elevGain)} / −{Math.round(leg.elevLoss)} m</span>
+              {avgPace !== null && <span className="text-gray-500">{formatPace(avgPace)}/km</span>}
             </div>
-            {avgPace !== null && (
-              <div>
-                <p className="text-[11px] text-gray-500 uppercase tracking-wide mb-0.5">Allure moy.</p>
-                <p className="font-semibold text-gray-100">{formatPace(avgPace)}/km</p>
+
+            {/* Temps */}
+            <div className="flex flex-col gap-2 pb-1 border-b border-gray-700">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] text-gray-500 uppercase tracking-wide font-medium">Temps du tronçon</span>
+                {isTimeOvr && (
+                  <button onClick={() => resetTimeOverride(key)}
+                    className="text-[11px] text-gray-600 hover:text-gray-400 flex items-center gap-1.5">
+                    <RotateCcw size={10} /> prédit : {formatTime(predictedTime)}
+                  </button>
+                )}
+              </div>
+              <div className="flex items-center gap-3">
+                <Input
+                  key={`t-${selectedLegIdx}-${timeOverrides[key] ?? 'auto'}`}
+                  type="text"
+                  defaultValue={formatDuration(leg.time)}
+                  onBlur={e => setTimeOverride(key, e.target.value)}
+                  placeholder="ex: 1:30"
+                  className={['w-24 bg-gray-700 border-0 h-auto py-1.5 text-sm focus-visible:ring-1 focus-visible:ring-gray-500',
+                    isTimeOvr ? 'text-amber-300' : 'text-gray-100'].join(' ')}
+                />
+                {!isTimeOvr
+                  ? <span className="text-[11px] text-gray-600">prédit par le modèle GAP</span>
+                  : <span className="text-[11px] text-amber-600/80">modifié manuellement</span>
+                }
+              </div>
+            </div>
+
+            {/* Nutrition par aliments */}
+            <LegNutritionPanel
+              legTime={leg.time}
+              assignments={legNutritionPlan[key] ?? []}
+              foodLibrary={foodLibrary}
+              carbsPerHour={carbsPerHour}
+              waterPerHour={waterPerHour}
+              sodiumPerHour={sodiumPerHour}
+              onAddFood={id => addFoodToLeg(key, id)}
+              onRemoveFood={id => removeFoodFromLeg(key, id)}
+            />
+
+            {/* Rename / delete du ravito en fin de tronçon */}
+            {endStation && (
+              <div className="flex items-center gap-3 pt-3 border-t border-gray-700">
+                <Input
+                  type="text"
+                  value={endStation.name}
+                  onChange={e => updateStationName(endStation.id, e.target.value)}
+                  className="bg-gray-700 border-0 h-auto py-1.5 text-sm text-gray-200 focus-visible:ring-1 focus-visible:ring-gray-500 flex-1"
+                />
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setConfirmDeleteStationId(endStation.id)}
+                  className="text-gray-600 hover:text-red-400 hover:bg-red-900/20 shrink-0"
+                  title="Supprimer ce ravito"
+                >
+                  <Trash2 size={14} />
+                </Button>
               </div>
             )}
           </div>
         );
       })()}
-
-      {/* Liste des ravitaillements */}
-      {sortedStations.length > 0 && (
-        <div className="flex flex-col gap-2">
-          <h3 className="text-sm font-medium text-gray-400">Points de ravitaillement</h3>
-          <div className="rounded-lg border border-gray-700 overflow-hidden">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-gray-700 bg-gray-800">
-                  <th className="text-left px-4 py-2 text-[11px] text-gray-500 uppercase tracking-wide font-medium">Nom</th>
-                  <th className="text-right px-4 py-2 text-[11px] text-gray-500 uppercase tracking-wide font-medium">Distance</th>
-                  <th className="text-right px-4 py-2 text-[11px] text-gray-500 uppercase tracking-wide font-medium">D+</th>
-                  <th className="text-right px-4 py-2 text-[11px] text-gray-500 uppercase tracking-wide font-medium">D−</th>
-                  <th className="text-right px-4 py-2 text-[11px] text-gray-500 uppercase tracking-wide font-medium">Arrivée estimée</th>
-                  <th className="px-4 py-2"></th>
-                </tr>
-              </thead>
-              <tbody>
-                {sortedStations.map((station, si) => {
-                  const leg = legs[si + 1]; // legs[0] = Départ→Ravito1, legs[si+1] = ..→station
-                  const arrival = leg ? leg.cumulativeTime : null;
-                  // Cumulative D+/D- up to this station
-                  const cumGain = legs.slice(0, si + 1).reduce((s, l) => s + l.elevGain, 0);
-                  const cumLoss = legs.slice(0, si + 1).reduce((s, l) => s + l.elevLoss, 0);
-                  return (
-                    <tr key={station.id} className="border-b border-gray-800 last:border-0 hover:bg-gray-800/50">
-                      <td className="px-4 py-2">
-                        <input
-                          type="text"
-                          value={station.name}
-                          onChange={e => updateStationName(station.id, e.target.value)}
-                          className="bg-transparent text-gray-200 outline-none focus:text-white w-full"
-                        />
-                      </td>
-                      <td className="px-4 py-2 text-right text-gray-300">
-                        {(station.distanceFromStart / 1000).toFixed(1)} km
-                      </td>
-                      <td className="px-4 py-2 text-right text-gray-300">
-                        +{Math.round(cumGain)} m
-                      </td>
-                      <td className="px-4 py-2 text-right text-gray-300">
-                        −{Math.round(cumLoss)} m
-                      </td>
-                      <td className="px-4 py-2 text-right text-gray-300">
-                        {arrival !== null ? formatTime(arrival) : '—'}
-                      </td>
-                      <td className="px-4 py-2 text-right">
-                        <button
-                          onClick={() => deleteStation(station.id)}
-                          className="text-gray-600 hover:text-red-400 transition-colors text-base leading-none"
-                          title="Supprimer"
-                        >
-                          ×
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
 
       {aidStations.length === 0 && (
         <p className="text-[11px] text-gray-600 text-center">

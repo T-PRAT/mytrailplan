@@ -29,6 +29,28 @@
   --slope-p10: #E07B4F;
   --slope-p20: #C7453B;
   --slope-p30: #8B1E3F;
+
+  /* shadcn/ui CSS variables — dark palette */
+  --background: #0E0E0E;
+  --foreground: #F0EDE5;
+  --card: #161614;
+  --card-foreground: #F0EDE5;
+  --popover: #1E1E1B;
+  --popover-foreground: #F0EDE5;
+  --primary: #F0EDE5;
+  --primary-foreground: #0E0E0E;
+  --secondary: #1E1E1B;
+  --secondary-foreground: #F0EDE5;
+  --muted: #1E1E1B;
+  --muted-foreground: #6E6C66;
+  --accent: #282824;
+  --accent-foreground: #F0EDE5;
+  --destructive: #C7453B;
+  --destructive-foreground: #F0EDE5;
+  --border: #3D3D37;
+  --input: #3D3D37;
+  --ring: #56554E;
+  --radius: 0.5rem;
 }
 
 @theme {

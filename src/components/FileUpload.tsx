@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react';
+import { Button } from '@/components/ui/button';
 
 interface Props {
   onFile: (text: string, name: string) => void;
@@ -44,6 +45,14 @@ export function FileUpload({ onFile }: Props) {
         <p className="text-lg font-medium text-gray-300">Déposez votre fichier GPX ici</p>
         <p className="text-sm text-gray-500 mt-1">ou cliquez pour sélectionner</p>
       </div>
+      <Button
+        variant="outline"
+        size="sm"
+        className="border-gray-600 bg-transparent text-gray-400 hover:bg-gray-700 hover:text-gray-200 hover:border-gray-500"
+        onClick={(e) => { e.stopPropagation(); inputRef.current?.click(); }}
+      >
+        Parcourir les fichiers
+      </Button>
       <input
         ref={inputRef}
         type="file"

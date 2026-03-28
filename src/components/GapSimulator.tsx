@@ -4,6 +4,10 @@ import {
   simulateGap, detectSegments, gapPaceFromTime,
   parseDuration, formatPace, formatTime,
 } from '../lib/gapCalculation';
+import { Button } from '@/components/ui/button';
+import { Slider } from '@/components/ui/slider';
+import { Input } from '@/components/ui/input';
+import { Switch } from '@/components/ui/switch';
 
 interface Props {
   sections: Section[];
@@ -285,48 +289,50 @@ export function GapSimulator({ sections, profilePoints, totalDistance, slopeHexF
         <h2 className="text-base font-semibold text-gray-200">Simulateur VAP</h2>
         <div className="flex items-center gap-4">
           {zoom && (
-            <button onClick={() => setZoom(null)} className="text-xs text-gray-500 hover:text-gray-300 underline">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setZoom(null)}
+              className="text-xs text-gray-500 hover:text-gray-300 h-auto py-1 px-2"
+            >
               Réinitialiser le zoom
-            </button>
+            </Button>
           )}
           <label className="flex items-center gap-1.5 cursor-pointer select-none">
             <span className="text-xs text-gray-500">Courbe d'allure</span>
-            <div
-              onClick={() => setShowPaceLine(v => !v)}
-              className={[
-                'w-7 h-4 rounded-full transition-colors relative',
-                showPaceLine ? 'bg-gray-400' : 'bg-gray-700',
-              ].join(' ')}
-            >
-              <div className={[
-                'absolute top-0.5 w-3 h-3 rounded-full bg-gray-100 transition-transform',
-                showPaceLine ? 'translate-x-3.5' : 'translate-x-0.5',
-              ].join(' ')} />
-            </div>
+            <Switch
+              checked={showPaceLine}
+              onCheckedChange={setShowPaceLine}
+              className="data-[state=checked]:bg-gray-400 data-[state=unchecked]:bg-gray-700"
+            />
           </label>
         </div>
       </div>
 
       {/* Toggle mode */}
       <div className="flex items-center gap-1 bg-gray-800 rounded-lg p-1 w-fit">
-        <button
+        <Button
+          variant="ghost"
+          size="sm"
           onClick={() => setMode('vap')}
           className={[
-            'px-3 py-1 rounded-md text-sm font-medium transition-colors',
-            mode === 'vap' ? 'bg-gray-700 text-gray-100' : 'text-gray-500 hover:text-gray-300',
+            'px-3 py-1 rounded-md text-sm font-medium h-auto transition-colors',
+            mode === 'vap' ? 'bg-gray-700 text-gray-100 hover:bg-gray-700 hover:text-gray-100' : 'text-gray-500 hover:text-gray-300 hover:bg-transparent',
           ].join(' ')}
         >
           VAP cible
-        </button>
-        <button
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
           onClick={() => setMode('duration')}
           className={[
-            'px-3 py-1 rounded-md text-sm font-medium transition-colors',
-            mode === 'duration' ? 'bg-gray-700 text-gray-100' : 'text-gray-500 hover:text-gray-300',
+            'px-3 py-1 rounded-md text-sm font-medium h-auto transition-colors',
+            mode === 'duration' ? 'bg-gray-700 text-gray-100 hover:bg-gray-700 hover:text-gray-100' : 'text-gray-500 hover:text-gray-300 hover:bg-transparent',
           ].join(' ')}
         >
           Durée cible
-        </button>
+        </Button>
       </div>
 
       {/* Contrôles */}
@@ -338,11 +344,12 @@ export function GapSimulator({ sections, profilePoints, totalDistance, slopeHexF
               {formatPace(sliderPace)}<span className="text-gray-500 font-normal"> /km</span>
             </span>
           </div>
-          <input
-            type="range" min={SLIDER_MIN} max={SLIDER_MAX} step={5}
-            value={sliderPace}
-            onChange={(e) => setSliderPace(Number(e.target.value))}
-            style={{ accentColor: PACE_LINE_COLOR }}
+          <Slider
+            min={SLIDER_MIN}
+            max={SLIDER_MAX}
+            step={5}
+            value={[sliderPace]}
+            onValueChange={(vals) => setSliderPace(vals[0])}
             className="w-full"
           />
           <div className="flex justify-between text-[11px] text-gray-600">
@@ -353,14 +360,15 @@ export function GapSimulator({ sections, profilePoints, totalDistance, slopeHexF
       ) : (
         <div className="flex items-center gap-3">
           <label className="text-sm text-gray-400 shrink-0">Durée estimée</label>
-          <input
-            type="text" value={durationInput}
+          <Input
+            type="text"
+            value={durationInput}
             onChange={(e) => setDurationInput(e.target.value)}
             placeholder="ex: 4:30 ou 4h30"
             maxLength={10}
             className={[
-              'w-36 bg-gray-800 rounded-lg px-3 py-1.5 text-sm text-gray-100 outline-none border',
-              durationInvalid ? 'border-red-700 focus:border-red-500' : 'border-gray-700 focus:border-gray-500',
+              'w-36 bg-gray-800 text-gray-100 border h-auto py-1.5 text-sm',
+              durationInvalid ? 'border-red-700 focus-visible:ring-red-500' : 'border-gray-700',
             ].join(' ')}
           />
           {parsedDuration && gapPace && (

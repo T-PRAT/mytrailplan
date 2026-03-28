@@ -11,6 +11,7 @@ import { SlopeThresholdSlider } from './components/SlopeThresholdSlider';
 import { RunWalkAnalysis } from './components/RunWalkAnalysis';
 import { GapSimulator } from './components/GapSimulator';
 import { AidStationPlanner } from './components/AidStationPlanner';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 
 type Tab = 'profil' | 'distribution' | 'course-marche' | 'simulateur' | 'ravitaillements';
 
@@ -126,39 +127,34 @@ export default function App() {
             </button>
           </div>
 
-          {/* Tab bar */}
-          <div className="px-10 border-b border-gray-800 flex gap-1">
-            {TABS.map(tab => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={[
-                  'px-4 py-3 text-sm font-medium border-b-2 transition-colors -mb-px',
-                  activeTab === tab.id
-                    ? 'border-gray-300 text-gray-100'
-                    : 'border-transparent text-gray-500 hover:text-gray-300 hover:border-gray-600',
-                ].join(' ')}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
+          {/* Tabs */}
+          <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as Tab)} className="flex flex-col flex-1">
+            <div className="px-10 border-b border-gray-800">
+              <TabsList className="h-auto bg-transparent p-0 gap-1 rounded-none">
+                {TABS.map(tab => (
+                  <TabsTrigger
+                    key={tab.id}
+                    value={tab.id}
+                    className="px-4 py-3 text-sm font-medium border-b-2 rounded-none -mb-px transition-colors data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-gray-300 data-[state=active]:text-gray-100 border-transparent text-gray-500 hover:text-gray-300 hover:border-gray-600"
+                  >
+                    {tab.label}
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+            </div>
 
-          {/* Tab content */}
-          <div className="px-10 py-6 pb-10 flex flex-col gap-6">
-            {activeTab === 'profil' && (
-              <>
+            {/* Tab content */}
+            <div className="px-10 py-6 pb-10 flex flex-col gap-6">
+              <TabsContent value="profil" className="mt-0 flex flex-col gap-6">
                 <SummaryStats result={result} />
                 <ElevationProfile
                   sections={result.sections}
                   profilePoints={result.profilePoints}
                   slopeHexFn={dynamicSlopeHex}
                 />
-              </>
-            )}
+              </TabsContent>
 
-            {activeTab === 'distribution' && (
-              <>
+              <TabsContent value="distribution" className="mt-0 flex flex-col gap-6">
                 <div>
                   <button
                     onClick={() => setShowThresholdConfig(v => !v)}
@@ -187,31 +183,31 @@ export default function App() {
                   uphillBuckets={uphillBuckets}
                   downhillBuckets={downhillBuckets}
                 />
-              </>
-            )}
+              </TabsContent>
 
-            {activeTab === 'course-marche' && (
-              <RunWalkAnalysis sections={result.sections} profilePoints={result.profilePoints} />
-            )}
+              <TabsContent value="course-marche" className="mt-0">
+                <RunWalkAnalysis sections={result.sections} profilePoints={result.profilePoints} />
+              </TabsContent>
 
-            {activeTab === 'simulateur' && (
-              <GapSimulator
-                sections={result.sections}
-                profilePoints={result.profilePoints}
-                totalDistance={result.totalDistance}
-                slopeHexFn={dynamicSlopeHex}
-              />
-            )}
+              <TabsContent value="simulateur" className="mt-0">
+                <GapSimulator
+                  sections={result.sections}
+                  profilePoints={result.profilePoints}
+                  totalDistance={result.totalDistance}
+                  slopeHexFn={dynamicSlopeHex}
+                />
+              </TabsContent>
 
-            {activeTab === 'ravitaillements' && (
-              <AidStationPlanner
-                sections={result.sections}
-                profilePoints={result.profilePoints}
-                totalDistance={result.totalDistance}
-                slopeHexFn={dynamicSlopeHex}
-              />
-            )}
-          </div>
+              <TabsContent value="ravitaillements" className="mt-0">
+                <AidStationPlanner
+                  sections={result.sections}
+                  profilePoints={result.profilePoints}
+                  totalDistance={result.totalDistance}
+                  slopeHexFn={dynamicSlopeHex}
+                />
+              </TabsContent>
+            </div>
+          </Tabs>
         </div>
       )}
     </div>
