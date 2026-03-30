@@ -1,4 +1,4 @@
-# TrailSlope
+# TrailPrep
 
 Analyse de traces GPX pour le trail running — distribution des pentes, simulation d'allure et planification des ravitaillements.
 

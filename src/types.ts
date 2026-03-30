@@ -72,7 +72,7 @@ export interface AidStation {
   name: string;               // "Ravito 1", "Ravito 2", ...
 }
 
-export type FoodItemType = 'flask' | 'gel' | 'bar';
+export type FoodItemType = 'flask' | 'gel' | 'bar' | 'pill';
 
 export interface FoodItem {
   id: string;
@@ -81,6 +81,7 @@ export interface FoodItem {
   hasPowder: boolean;  // only meaningful for flask
   carbsG: number;      // g per unit (0 if flask without powder)
   sodiumMg: number;    // mg per unit (0 if flask without powder)
+  caffeineMg: number;  // mg per unit (0 if no caffeine)
   waterMl: number;     // 500 for flask, 0 for gel/bar
 }
 
@@ -90,3 +91,42 @@ export interface LegFoodAssignment {
 }
 
 export type LegNutritionPlan = Record<string, LegFoodAssignment[]>;
+
+export interface HourlyTargets {
+  carbsPerHour: number;
+  waterPerHour: number;
+  sodiumPerHour: number;
+  caffeinePerHour: number;
+}
+
+export interface PaceSettings {
+  mode: 'vap' | 'duration';
+  sliderPace: number;
+  durationInput: string;
+}
+
+export interface NutritionState {
+  aidStations: AidStation[];
+  legNutritionPlan: LegNutritionPlan;
+  foodLibrary: FoodItem[];
+  hourlyTargets: HourlyTargets;
+  timeOverrides: Record<string, number>;
+  paceSettings: PaceSettings;
+}
+
+export interface StoredProject extends NutritionState {
+  id: string;
+  name: string;
+  gpxText: string;
+  filename: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface ProjectMeta {
+  id: string;
+  name: string;
+  filename: string;
+  createdAt: number;
+  updatedAt: number;
+}

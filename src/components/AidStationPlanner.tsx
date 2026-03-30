@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { RotateCcw, Trash2, X } from 'lucide-react';
-import type { AidStation, FoodItem, LegNutritionPlan, ProfilePoint, Section } from '../types';
+import { Pencil, RotateCcw, Trash2, X } from 'lucide-react';
+import type { AidStation, FoodItem, LegNutritionPlan, NutritionState, ProfilePoint, Section } from '../types';
 import {
   formatPace, formatTime, gapPaceFromTime, parseDuration, simulateGap,
 } from '../lib/gapCalculation';
-import { computeLegNutrition, loadFoodLibrary, saveFoodLibrary } from './aid-station/nutrition-utils';
+import { computeLegNutrition, getDefaultFoodLibrary } from './aid-station/nutrition-utils';
 import { FoodLibrary } from './aid-station/FoodLibrary';
 import { LegNutritionPanel } from './aid-station/LegNutritionPanel';
 import { Button } from '@/components/ui/button';
@@ -27,6 +27,8 @@ interface Props {
   profilePoints: ProfilePoint[];
   totalDistance: number;
   slopeHexFn: (slope: number) => string;
+  initialNutritionState?: NutritionState;
+  onNutritionStateChange?: (state: NutritionState) => void;
 }
 
 interface HoverState {
@@ -57,9 +59,9 @@ const VIEW_H_PROFILE = 230;
 const CHART_W = VIEW_W - PAD_LEFT - PAD_RIGHT;
 const CHART_H = VIEW_H_PROFILE - PAD_TOP - PAD_BOTTOM;
 
-const VIEW_H_BAR = 150;
+const VIEW_H_BAR = 168;
 const BAR_PAD_TOP = 22;
-const BAR_H = 96;
+const BAR_H = 114;
 
 const DEFAULT_GAP_PACE = 360;
 const SLIDER_MIN = 180;
@@ -70,6 +72,13 @@ const AID_COLORS = ['#2E6B8A', '#4AADAD', '#7DCFB6', '#5B8DB8', '#3D8B9E'];
 /** Centre une icône Lucide 24×24 sur (cx, cy) en SVG viewBox units */
 function lucideAt(cx: number, cy: number, scale = 0.46): string {
   return `translate(${cx - 12 * scale}, ${cy - 12 * scale}) scale(${scale})`;
+}
+
+function foodIconSrc(item: FoodItem): string {
+  if (item.type === 'flask') return item.hasPowder ? '/food/iso.png' : '/food/water.png';
+  if (item.type === 'gel') return '/food/gel.png';
+  if (item.type === 'pill') return '/food/pill.png';
+  return '/food/bar.png';
 }
 
 function formatDuration(secs: number): string {
@@ -130,24 +139,35 @@ function computeLegs(
   return legs;
 }
 
-export function AidStationPlanner({ sections, profilePoints, totalDistance, slopeHexFn }: Props) {
-  const [aidStations, setAidStations] = useState<AidStation[]>([]);
-  const [mode, setMode] = useState<'vap' | 'duration'>('vap');
-  const [sliderPace, setSliderPace] = useState(DEFAULT_GAP_PACE);
-  const [durationInput, setDurationInput] = useState('');
+export function AidStationPlanner({ sections, profilePoints, totalDistance, slopeHexFn, initialNutritionState, onNutritionStateChange }: Props) {
+  const [aidStations, setAidStations] = useState<AidStation[]>(() => initialNutritionState?.aidStations ?? []);
+  const [mode, setMode] = useState<'vap' | 'duration'>(() => initialNutritionState?.paceSettings.mode ?? 'vap');
+  const [sliderPace, setSliderPace] = useState(() => initialNutritionState?.paceSettings.sliderPace ?? DEFAULT_GAP_PACE);
+  const [durationInput, setDurationInput] = useState(() => initialNutritionState?.paceSettings.durationInput ?? '');
   const [hover, setHover] = useState<HoverState | null>(null);
   const [dragId, setDragId] = useState<string | null>(null);
   const [hoveredLegIdx, setHoveredLegIdx] = useState<number | null>(null);
-  const [carbsPerHour, setCarbsPerHour] = useState(60);
-  const [waterPerHour, setWaterPerHour] = useState(500);
-  const [sodiumPerHour, setSodiumPerHour] = useState(500);
+  const [carbsPerHour, setCarbsPerHour] = useState(() => initialNutritionState?.hourlyTargets.carbsPerHour ?? 60);
+  const [waterPerHour, setWaterPerHour] = useState(() => initialNutritionState?.hourlyTargets.waterPerHour ?? 500);
+  const [sodiumPerHour, setSodiumPerHour] = useState(() => initialNutritionState?.hourlyTargets.sodiumPerHour ?? 500);
+  const [caffeinePerHour, setCaffeinePerHour] = useState(() => initialNutritionState?.hourlyTargets.caffeinePerHour ?? 0);
   const [selectedLegIdx, setSelectedLegIdx] = useState<number | null>(null);
-  const [foodLibrary, setFoodLibrary] = useState<FoodItem[]>(() => loadFoodLibrary());
-  const [legNutritionPlan, setLegNutritionPlan] = useState<LegNutritionPlan>({});
-  const [timeOverrides, setTimeOverrides] = useState<Record<string, number>>({});
+  const [foodLibrary, setFoodLibrary] = useState<FoodItem[]>(() => initialNutritionState?.foodLibrary ?? getDefaultFoodLibrary());
+  const [legNutritionPlan, setLegNutritionPlan] = useState<LegNutritionPlan>(() => initialNutritionState?.legNutritionPlan ?? {});
+  const [timeOverrides, setTimeOverrides] = useState<Record<string, number>>(() => initialNutritionState?.timeOverrides ?? {});
 
-  useEffect(() => { saveFoodLibrary(foodLibrary); }, [foodLibrary]);
+  const isFirstRender = useRef(true);
+  useEffect(() => {
+    if (isFirstRender.current) { isFirstRender.current = false; return; }
+    onNutritionStateChange?.({
+      aidStations, legNutritionPlan, foodLibrary,
+      hourlyTargets: { carbsPerHour, waterPerHour, sodiumPerHour, caffeinePerHour },
+      timeOverrides,
+      paceSettings: { mode, sliderPace, durationInput },
+    });
+  }, [aidStations, legNutritionPlan, foodLibrary, carbsPerHour, waterPerHour, sodiumPerHour, caffeinePerHour, timeOverrides, mode, sliderPace, durationInput]); // eslint-disable-line react-hooks/exhaustive-deps
   const [confirmDeleteStationId, setConfirmDeleteStationId] = useState<string | null>(null);
+  const [editingStationName, setEditingStationName] = useState(false);
   const svgRef = useRef<SVGSVGElement>(null);
   const didDragRef = useRef(false);
 
@@ -474,6 +494,7 @@ export function AidStationPlanner({ sections, profilePoints, totalDistance, slop
             { label: 'Glucides', value: carbsPerHour, onChange: setCarbsPerHour, unit: 'g/h', min: 30, max: 120, step: 5 },
             { label: 'Eau', value: waterPerHour, onChange: setWaterPerHour, unit: 'mL/h', min: 100, max: 1500, step: 50 },
             { label: 'Sodium', value: sodiumPerHour, onChange: setSodiumPerHour, unit: 'mg/h', min: 100, max: 1500, step: 50 },
+            { label: 'Caféine', value: caffeinePerHour, onChange: setCaffeinePerHour, unit: 'mg/h', min: 0, max: 200, step: 5 },
           ].map(({ label, value, onChange, unit, min, max, step }) => (
             <div key={label} className="flex items-center gap-1.5 px-3 first:pl-0 last:pr-0">
               <span className="text-sm text-gray-400">{label}</span>
@@ -664,46 +685,78 @@ export function AidStationPlanner({ sections, profilePoints, totalDistance, slop
                       const distKm = (leg.distance / 1000).toFixed(1);
                       const gain = Math.round(leg.elevGain);
                       const cx = x + w / 2;
+
+                      const assignedItems = assignments
+                        .filter(a => a.quantity > 0)
+                        .map(a => ({ item: foodLibrary.find(f => f.id === a.foodItemId), qty: a.quantity }))
+                        .filter((a): a is { item: FoodItem; qty: number } => a.item !== undefined);
+
+                      const ICON_SIZE = 20;
+                      const ICON_GAP = 6;
+                      const maxIcons = w > 60 ? Math.floor((w - 12) / (ICON_SIZE + ICON_GAP)) : 0;
+                      const visibleItems = assignedItems.slice(0, Math.max(0, maxIcons));
+                      const iconsW = visibleItems.length > 0
+                        ? visibleItems.length * ICON_SIZE + (visibleItems.length - 1) * ICON_GAP
+                        : 0;
+                      const iconsStartX = cx - iconsW / 2;
+                      const iconsY = BAR_PAD_TOP + 37;
+
                       return (
                         <>
                           {/* Temps */}
                           {w > 45 && (
-                            <text x={cx} y={BAR_PAD_TOP + 22}
-                              textAnchor="middle" fontSize={13} fill={isTimeOverridden ? '#FCD34D' : '#F0EDE5'} fontWeight="700"
+                            <text x={cx} y={BAR_PAD_TOP + 17}
+                              textAnchor="middle" fontSize={12} fill={isTimeOverridden ? '#FCD34D' : '#F0EDE5'} fontWeight="700"
                               style={{ pointerEvents: 'none' }}>
                               {formatTime(leg.time)}
                             </text>
                           )}
                           {/* Distance + D+ */}
                           {w > 70 && (
-                            <text x={cx} y={BAR_PAD_TOP + 40}
-                              textAnchor="middle" fontSize={10} fill="rgba(240,237,229,0.55)"
+                            <text x={cx} y={BAR_PAD_TOP + 29}
+                              textAnchor="middle" fontSize={9} fill="rgba(240,237,229,0.55)"
                               style={{ pointerEvents: 'none' }}>
                               {distKm} km · +{gain} m
                             </text>
                           )}
-                          {/* Glucides */}
+                          {/* Icônes aliments */}
+                          {visibleItems.map(({ item, qty }, i) => (
+                            <g key={item.id} style={{ pointerEvents: 'none' }}>
+                              <image
+                                href={foodIconSrc(item)}
+                                x={iconsStartX + i * (ICON_SIZE + ICON_GAP)}
+                                y={iconsY}
+                                width={ICON_SIZE}
+                                height={ICON_SIZE}
+                              />
+                              {qty > 1 && (
+                                <text
+                                  x={iconsStartX + i * (ICON_SIZE + ICON_GAP) + ICON_SIZE}
+                                  y={iconsY + ICON_SIZE}
+                                  fontSize={6.5}
+                                  fill="rgba(240,237,229,0.9)"
+                                  textAnchor="end"
+                                  fontWeight="700"
+                                  style={{ pointerEvents: 'none' }}>
+                                  {qty}
+                                </text>
+                              )}
+                            </g>
+                          ))}
+                          {/* Glucides + eau */}
                           {w > 70 && (
-                            <text x={cx} y={BAR_PAD_TOP + 58}
-                              textAnchor="middle" fontSize={10} fill={hasNutrition ? '#FBBF24' : 'rgba(251,191,36,0.35)'}
+                            <text x={cx} y={BAR_PAD_TOP + 70}
+                              textAnchor="middle" fontSize={9} fill={hasNutrition ? '#FBBF24' : 'rgba(251,191,36,0.35)'}
                               style={{ pointerEvents: 'none' }}>
-                              {hasNutrition ? `${nutrition.carbs} g glucides` : '— glucides'}
-                            </text>
-                          )}
-                          {/* Eau */}
-                          {w > 70 && (
-                            <text x={cx} y={BAR_PAD_TOP + 73}
-                              textAnchor="middle" fontSize={10} fill={hasNutrition ? '#60A5FA' : 'rgba(96,165,250,0.35)'}
-                              style={{ pointerEvents: 'none' }}>
-                              {hasNutrition ? `${nutrition.water} mL eau` : '— mL eau'}
+                              {hasNutrition ? `${nutrition.carbs}g gluc · ${nutrition.water}mL` : '— glucides'}
                             </text>
                           )}
                           {/* Sodium */}
-                          {w > 70 && (
-                            <text x={cx} y={BAR_PAD_TOP + 88}
-                              textAnchor="middle" fontSize={10} fill={hasNutrition ? '#C084FC' : 'rgba(192,132,252,0.35)'}
+                          {w > 70 && hasNutrition && (
+                            <text x={cx} y={BAR_PAD_TOP + 83}
+                              textAnchor="middle" fontSize={9} fill="rgba(148,163,184,0.85)"
                               style={{ pointerEvents: 'none' }}>
-                              {hasNutrition ? `${nutrition.sodium} mg Na` : '— mg Na'}
+                              {nutrition.sodium}mg Na{nutrition.caffeine > 0 ? ` · ${nutrition.caffeine}mg caféine` : ''}
                             </text>
                           )}
                         </>
@@ -769,6 +822,130 @@ export function AidStationPlanner({ sections, profilePoints, totalDistance, slop
         </svg>
       )}
 
+      {/* Modal d'édition du tronçon */}
+      {selectedLegIdx !== null && effectiveLegs[selectedLegIdx] && (() => {
+        const leg = effectiveLegs[selectedLegIdx];
+        const predictedTime = legs[selectedLegIdx]?.time ?? leg.time;
+        const key = legKey(selectedLegIdx);
+        const isTimeOvr = key in timeOverrides;
+        const avgPace = leg.time > 0 && leg.distance > 0 ? leg.time / (leg.distance / 1000) : null;
+        const endStation = leg.toName !== 'Arrivée' ? sortedStations.find(s => s.name === leg.toName) : null;
+
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={() => { setSelectedLegIdx(null); setEditingStationName(false); }}>
+            <div className="absolute inset-0 bg-black/60" />
+            <div
+              className="relative bg-gray-900 border border-gray-700 rounded-xl p-6 flex flex-col gap-5 w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl"
+              onClick={e => e.stopPropagation()}
+            >
+              {/* Header */}
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2 min-w-0 flex-1">
+                  <span className="text-sm text-gray-400 shrink-0">{leg.fromName}</span>
+                  <span className="text-gray-600 shrink-0">→</span>
+                  {endStation ? (
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      {editingStationName ? (
+                        <input
+                          autoFocus
+                          type="text"
+                          value={endStation.name}
+                          onChange={e => updateStationName(endStation.id, e.target.value)}
+                          onBlur={() => setEditingStationName(false)}
+                          onKeyDown={e => e.key === 'Enter' && setEditingStationName(false)}
+                          className="bg-transparent border-b border-gray-500 focus:border-gray-300 outline-none text-sm font-semibold text-gray-100 py-0.5 w-[140px]"
+                        />
+                      ) : (
+                        <span className="text-sm font-semibold text-gray-100">{endStation.name}</span>
+                      )}
+                      <button
+                        onClick={() => setEditingStationName(v => !v)}
+                        className="text-gray-600 hover:text-gray-300 transition-colors shrink-0"
+                        title="Renommer"
+                      >
+                        <Pencil size={11} />
+                      </button>
+                    </div>
+                  ) : (
+                    <span className="text-sm font-semibold text-gray-100">{leg.toName}</span>
+                  )}
+                </div>
+                <div className="flex items-center gap-1 shrink-0">
+                  {endStation && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => setConfirmDeleteStationId(endStation.id)}
+                      className="h-7 w-7 text-gray-600 hover:text-red-400 hover:bg-red-900/20"
+                      title="Supprimer ce ravito"
+                    >
+                      <Trash2 size={13} />
+                    </Button>
+                  )}
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => { setSelectedLegIdx(null); setEditingStationName(false); }}
+                    className="h-7 w-7 text-gray-500 hover:text-gray-300"
+                  >
+                    <X size={14} />
+                  </Button>
+                </div>
+              </div>
+
+              {/* Stats */}
+              <div className="flex flex-wrap gap-4 text-sm">
+                <span className={isTimeOvr ? 'text-amber-300 font-medium' : 'text-gray-200 font-medium'}>{formatTime(leg.time)}</span>
+                <span className="text-gray-500">{(leg.distance / 1000).toFixed(1)} km</span>
+                <span className="text-gray-500">+{Math.round(leg.elevGain)} / −{Math.round(leg.elevLoss)} m</span>
+                {avgPace !== null && <span className="text-gray-500">{formatPace(avgPace)}/km</span>}
+              </div>
+
+              {/* Temps */}
+              <div className="flex flex-col gap-2 pb-1 border-b border-gray-700">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] text-gray-500 uppercase tracking-wide font-medium">Temps du tronçon</span>
+                  {isTimeOvr && (
+                    <button onClick={() => resetTimeOverride(key)}
+                      className="text-[11px] text-gray-600 hover:text-gray-400 flex items-center gap-1.5">
+                      <RotateCcw size={10} /> prédit : {formatTime(predictedTime)}
+                    </button>
+                  )}
+                </div>
+                <div className="flex items-center gap-3">
+                  <Input
+                    key={`t-${selectedLegIdx}-${timeOverrides[key] ?? 'auto'}`}
+                    type="text"
+                    defaultValue={formatDuration(leg.time)}
+                    onBlur={e => setTimeOverride(key, e.target.value)}
+                    placeholder="ex: 1:30"
+                    className={['w-24 bg-gray-700 border-0 h-auto py-1.5 text-sm focus-visible:ring-1 focus-visible:ring-gray-500',
+                      isTimeOvr ? 'text-amber-300' : 'text-gray-100'].join(' ')}
+                  />
+                  {!isTimeOvr
+                    ? <span className="text-[11px] text-gray-600">prédit par le modèle GAP</span>
+                    : <span className="text-[11px] text-amber-600/80">modifié manuellement</span>
+                  }
+                </div>
+              </div>
+
+              {/* Nutrition */}
+              <LegNutritionPanel
+                legTime={leg.time}
+                assignments={legNutritionPlan[key] ?? []}
+                foodLibrary={foodLibrary}
+                carbsPerHour={carbsPerHour}
+                waterPerHour={waterPerHour}
+                sodiumPerHour={sodiumPerHour}
+                caffeinePerHour={caffeinePerHour}
+                onAddFood={id => addFoodToLeg(key, id)}
+                onRemoveFood={id => removeFoodFromLeg(key, id)}
+              />
+            </div>
+          </div>
+        );
+      })()}
+
       {/* AlertDialog for delete confirmation */}
       <AlertDialog open={!!confirmDeleteStationId} onOpenChange={(open) => { if (!open) setConfirmDeleteStationId(null); }}>
         <AlertDialogContent className="bg-gray-900 border-gray-700 text-gray-100">
@@ -799,105 +976,6 @@ export function AidStationPlanner({ sections, profilePoints, totalDistance, slop
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Panneau d'édition du tronçon sélectionné */}
-      {selectedLegIdx !== null && effectiveLegs[selectedLegIdx] && (() => {
-        const leg = effectiveLegs[selectedLegIdx];
-        const predictedTime = legs[selectedLegIdx]?.time ?? leg.time;
-        const key = legKey(selectedLegIdx);
-        const isTimeOvr = key in timeOverrides;
-        const avgPace = leg.time > 0 && leg.distance > 0 ? leg.time / (leg.distance / 1000) : null;
-        const endStation = leg.toName !== 'Arrivée' ? sortedStations.find(s => s.name === leg.toName) : null;
-
-        return (
-          <div className="bg-gray-800 border border-gray-600 rounded-xl p-4 flex flex-col gap-4">
-            {/* Header */}
-            <div className="flex items-center justify-between">
-              <p className="font-semibold text-gray-100 text-sm">
-                <span className="text-gray-400">{leg.fromName}</span>
-                <span className="text-gray-600 mx-2">→</span>
-                <span className="text-gray-200">{leg.toName}</span>
-              </p>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => setSelectedLegIdx(null)}
-                className="h-6 w-6 text-gray-500 hover:text-gray-300"
-              >
-                <X size={14} />
-              </Button>
-            </div>
-
-            {/* Stats */}
-            <div className="flex flex-wrap gap-4 text-sm">
-              <span className={isTimeOvr ? 'text-amber-300 font-medium' : 'text-gray-200 font-medium'}>{formatTime(leg.time)}</span>
-              <span className="text-gray-500">{(leg.distance / 1000).toFixed(1)} km</span>
-              <span className="text-gray-500">+{Math.round(leg.elevGain)} / −{Math.round(leg.elevLoss)} m</span>
-              {avgPace !== null && <span className="text-gray-500">{formatPace(avgPace)}/km</span>}
-            </div>
-
-            {/* Temps */}
-            <div className="flex flex-col gap-2 pb-1 border-b border-gray-700">
-              <div className="flex items-center justify-between">
-                <span className="text-[11px] text-gray-500 uppercase tracking-wide font-medium">Temps du tronçon</span>
-                {isTimeOvr && (
-                  <button onClick={() => resetTimeOverride(key)}
-                    className="text-[11px] text-gray-600 hover:text-gray-400 flex items-center gap-1.5">
-                    <RotateCcw size={10} /> prédit : {formatTime(predictedTime)}
-                  </button>
-                )}
-              </div>
-              <div className="flex items-center gap-3">
-                <Input
-                  key={`t-${selectedLegIdx}-${timeOverrides[key] ?? 'auto'}`}
-                  type="text"
-                  defaultValue={formatDuration(leg.time)}
-                  onBlur={e => setTimeOverride(key, e.target.value)}
-                  placeholder="ex: 1:30"
-                  className={['w-24 bg-gray-700 border-0 h-auto py-1.5 text-sm focus-visible:ring-1 focus-visible:ring-gray-500',
-                    isTimeOvr ? 'text-amber-300' : 'text-gray-100'].join(' ')}
-                />
-                {!isTimeOvr
-                  ? <span className="text-[11px] text-gray-600">prédit par le modèle GAP</span>
-                  : <span className="text-[11px] text-amber-600/80">modifié manuellement</span>
-                }
-              </div>
-            </div>
-
-            {/* Nutrition par aliments */}
-            <LegNutritionPanel
-              legTime={leg.time}
-              assignments={legNutritionPlan[key] ?? []}
-              foodLibrary={foodLibrary}
-              carbsPerHour={carbsPerHour}
-              waterPerHour={waterPerHour}
-              sodiumPerHour={sodiumPerHour}
-              onAddFood={id => addFoodToLeg(key, id)}
-              onRemoveFood={id => removeFoodFromLeg(key, id)}
-            />
-
-            {/* Rename / delete du ravito en fin de tronçon */}
-            {endStation && (
-              <div className="flex items-center gap-3 pt-3 border-t border-gray-700">
-                <Input
-                  type="text"
-                  value={endStation.name}
-                  onChange={e => updateStationName(endStation.id, e.target.value)}
-                  className="bg-gray-700 border-0 h-auto py-1.5 text-sm text-gray-200 focus-visible:ring-1 focus-visible:ring-gray-500 flex-1"
-                />
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => setConfirmDeleteStationId(endStation.id)}
-                  className="text-gray-600 hover:text-red-400 hover:bg-red-900/20 shrink-0"
-                  title="Supprimer ce ravito"
-                >
-                  <Trash2 size={14} />
-                </Button>
-              </div>
-            )}
-          </div>
-        );
-      })()}
 
       {aidStations.length === 0 && (
         <p className="text-[11px] text-gray-600 text-center">

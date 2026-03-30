@@ -9,6 +9,7 @@ interface Props {
   carbsPerHour: number;
   waterPerHour: number;
   sodiumPerHour: number;
+  caffeinePerHour: number;
   onAddFood: (foodItemId: string) => void;
   onRemoveFood: (foodItemId: string) => void;
 }
@@ -16,12 +17,14 @@ interface Props {
 const BILAN_ROWS = [
   { key: 'carbs',  label: 'Gluc.',  unit: 'g',  color: 'text-amber-400',  bg: 'bg-amber-900/30',  border: 'border-amber-700/40'  },
   { key: 'water',  label: 'Eau',    unit: 'mL', color: 'text-sky-400',    bg: 'bg-sky-900/30',    border: 'border-sky-700/40'    },
-  { key: 'sodium', label: 'Na',     unit: 'mg', color: 'text-purple-400', bg: 'bg-purple-900/30', border: 'border-purple-700/40' },
+  { key: 'sodium',   label: 'Na',      unit: 'mg', color: 'text-slate-300',  bg: 'bg-slate-700/30',  border: 'border-slate-500/40'  },
+  { key: 'caffeine', label: 'Caféine', unit: 'mg', color: 'text-violet-400', bg: 'bg-violet-900/30', border: 'border-violet-700/40' },
 ] as const;
 
 function foodIcon(item: FoodItem): string {
   if (item.type === 'flask') return item.hasPowder ? '/food/iso.png' : '/food/water.png';
   if (item.type === 'gel') return '/food/gel.png';
+  if (item.type === 'pill') return '/food/pill.png';
   return '/food/bar.png';
 }
 
@@ -33,7 +36,7 @@ function FoodCard({ item, qty, onAdd, onRemove }: {
 }) {
   const [hovered, setHovered] = useState(false);
   const icon = foodIcon(item);
-  const hasMacros = item.carbsG > 0 || item.sodiumMg > 0 || item.waterMl > 0;
+  const hasMacros = item.carbsG > 0 || item.sodiumMg > 0 || item.caffeineMg > 0 || item.waterMl > 0;
 
   return (
     <div
@@ -49,7 +52,8 @@ function FoodCard({ item, qty, onAdd, onRemove }: {
             <div className="flex items-center gap-2 justify-center">
               {item.waterMl > 0 && <span className="text-sky-400">{item.waterMl} mL</span>}
               {item.carbsG > 0 && <span className="text-amber-400">{item.carbsG} g gluc.</span>}
-              {item.sodiumMg > 0 && <span className="text-purple-400">{item.sodiumMg} mg Na</span>}
+              {item.sodiumMg > 0 && <span className="text-slate-300">{item.sodiumMg} mg Na</span>}
+              {item.caffeineMg > 0 && <span className="text-violet-400">{item.caffeineMg} mg caféine</span>}
             </div>
           </div>
           <div className="w-2 h-2 bg-gray-900 border-r border-b border-gray-600 rotate-45 mx-auto -mt-1" />
@@ -69,46 +73,42 @@ function FoodCard({ item, qty, onAdd, onRemove }: {
       >
         <img src={icon} alt={item.name} className="w-10 h-10 object-contain drop-shadow-sm" />
 
-        {/* Qty badge */}
+        {/* Qty badge — cliquable pour retirer */}
         {qty > 0 && (
-          <span className="absolute -top-2 -right-2 min-w-[22px] h-[22px] px-1 bg-teal-500 text-white text-[11px] font-bold rounded-full flex items-center justify-center shadow-lg leading-none">
-            {qty}
-          </span>
+          <button
+            onClick={e => { e.stopPropagation(); onRemove(); }}
+            className="absolute -top-2 -right-2 group min-w-[22px] h-[22px] px-1 bg-teal-500 hover:bg-red-500 text-white text-[11px] font-bold rounded-full flex items-center justify-center shadow-lg leading-none transition-colors cursor-pointer"
+            title="Retirer un"
+          >
+            <span className="group-hover:hidden">{qty}</span>
+            <span className="hidden group-hover:inline">−</span>
+          </button>
         )}
       </button>
 
       {/* Name */}
-      <span className="text-[10px] text-gray-500 text-center w-[72px] truncate leading-tight">
+      <span className="text-[10px] text-gray-500 text-center w-[72px] leading-tight line-clamp-2 break-words">
         {item.name}
       </span>
-
-      {/* Remove control */}
-      {qty > 0 && (
-        <button
-          onClick={onRemove}
-          className="text-[10px] text-gray-600 hover:text-red-400 transition-colors leading-none -mt-0.5"
-        >
-          − retirer
-        </button>
-      )}
     </div>
   );
 }
 
 export function LegNutritionPanel({
   legTime, assignments, foodLibrary,
-  carbsPerHour, waterPerHour, sodiumPerHour,
+  carbsPerHour, waterPerHour, sodiumPerHour, caffeinePerHour,
   onAddFood, onRemoveFood,
 }: Props) {
   const totals = computeLegNutrition(assignments, foodLibrary);
   const hours = legTime / 3600;
   const targets = {
-    carbs:  Math.round(hours * carbsPerHour),
-    water:  Math.round(hours * waterPerHour),
-    sodium: Math.round(hours * sodiumPerHour),
+    carbs:    Math.round(hours * carbsPerHour),
+    water:    Math.round(hours * waterPerHour),
+    sodium:   Math.round(hours * sodiumPerHour),
+    caffeine: Math.round(hours * caffeinePerHour),
   };
   const hasAssignments = assignments.length > 0;
-  const actual: Record<string, number> = { carbs: totals.carbs, water: totals.water, sodium: totals.sodium };
+  const actual: Record<string, number> = { carbs: totals.carbs, water: totals.water, sodium: totals.sodium, caffeine: totals.caffeine };
 
   return (
     <div className="flex flex-col gap-3">
