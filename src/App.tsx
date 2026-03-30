@@ -1,8 +1,8 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { parseGpx } from './lib/gpxParser';
 import { analyze, classifyIntoBuckets } from './lib/slopeAnalysis';
 import { interpolateHexColors, slopeHexDynamic } from './lib/colors';
-import type { AnalysisResult } from './types';
+import type { AnalysisResult, NutritionState } from './types';
 import { FileUpload } from './components/FileUpload';
 import { SummaryStats } from './components/SummaryStats';
 import { DistributionChart } from './components/DistributionChart';
@@ -11,13 +11,15 @@ import { SlopeThresholdSlider } from './components/SlopeThresholdSlider';
 import { RunWalkAnalysis } from './components/RunWalkAnalysis';
 import { GapSimulator } from './components/GapSimulator';
 import { AidStationPlanner } from './components/AidStationPlanner';
+import { ProjectPicker } from './components/ProjectPicker';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { useProjectManager } from './hooks/useProjectManager';
 
-type Tab = 'profil' | 'distribution' | 'course-marche' | 'simulateur' | 'ravitaillements';
+type Tab = 'pentes' | 'course-marche' | 'simulateur' | 'ravitaillements';
 
 const TABS: { id: Tab; label: string }[] = [
-  { id: 'profil',           label: 'Profil' },
-  { id: 'distribution',     label: 'Distribution' },
+  { id: 'pentes',           label: 'Pentes' },
   { id: 'course-marche',    label: 'Course / Marche' },
   { id: 'simulateur',       label: 'Simulateur VAP' },
   { id: 'ravitaillements',  label: 'Ravitaillements' },
@@ -26,29 +28,44 @@ const TABS: { id: Tab; label: string }[] = [
 export default function App() {
   const [result, setResult] = useState<AnalysisResult | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [filename, setFilename] = useState<string>('');
   const [thresholds, setThresholds] = useState<number[]>([5, 10, 20, 30]);
   const [showThresholdConfig, setShowThresholdConfig] = useState(false);
-  const [activeTab, setActiveTab] = useState<Tab>('profil');
+  const [activeTab, setActiveTab] = useState<Tab>('pentes');
+  const [pickerOpen, setPickerOpen] = useState(false);
 
-  function handleFile(text: string, name: string) {
+  const { ready, projects, activeProject, openProject, createProject, save, renameProject, deleteProject } = useProjectManager();
+
+  // Restore analysis when project loads
+  useEffect(() => {
+    if (!activeProject?.gpxText) { setResult(null); return; }
+    try {
+      const points = parseGpx(activeProject.gpxText);
+      setResult(analyze(points));
+    } catch { setResult(null); }
+  }, [activeProject?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function handleFile(gpxText: string, filename: string) {
     setError(null);
     try {
-      const points = parseGpx(text);
+      const points = parseGpx(gpxText);
       const analysis = analyze(points);
       setResult(analysis);
-      setFilename(name);
+      await createProject(gpxText, filename);
+      setPickerOpen(false);
     } catch (e) {
       setError((e as Error).message);
       setResult(null);
     }
   }
 
-  function reset() {
-    setResult(null);
-    setError(null);
-    setFilename('');
-    setActiveTab('profil');
+  async function handleOpen(id: string) {
+    setPickerOpen(false);
+    await openProject(id);
+    setActiveTab('pentes');
+  }
+
+  function handleNutritionStateChange(state: NutritionState) {
+    save(state);
   }
 
   const uphillColors = useMemo(
@@ -92,38 +109,69 @@ export default function App() {
       <rect x="0" y="3" width="68" height="42" clip-path="url(#logo-clip)" fill="url(#logo-grad)"/>
       <path d="M0,44 C6,43 10,40 15,33 C21,24 25,14 30,8 C32,4 34,3 36,5 C39,8 42,15 45,23 C48,30 50,33 53,32 C55,30 57,24 59,18 C61,14 62,16 63,21 C65,28 66,38 68,44"
         fill="none" stroke="#F0EDE5" stroke-width="1.5" stroke-linecap="round" stroke-opacity="0.5"/>
-      <text x="78" y="30" font-family="system-ui, sans-serif" font-size="22" font-weight="700" fill="#F0EDE5" dominant-baseline="middle">TrailSlope</text>
+      <text x="78" y="30" font-family="system-ui, sans-serif" font-size="22" font-weight="700" fill="#F0EDE5" dominant-baseline="middle">TrailPrep</text>
     </svg>
   );
 
+  if (!ready) {
+    return <div className="min-h-screen bg-gray-950" />;
+  }
+
   return (
     <div className="min-h-screen bg-gray-950">
-      {!result && (
+      {/* Home screen — no active project */}
+      {!activeProject && (
         <div className="max-w-xl mx-auto px-4 py-10">
           <div className="mb-8">
             <Logo />
             <p className="text-gray-400 mt-1 text-sm">Analyse de la distribution des pentes d'une trace GPX</p>
           </div>
-          <FileUpload onFile={(text, name) => handleFile(text, name)} />
-          {error && (
-            <div className="mt-4 p-4 bg-red-950 border border-red-800 rounded-xl text-red-400 text-sm">
-              {error}
+
+          {projects.length > 0 ? (
+            <div className="flex flex-col gap-4">
+              <p className="text-sm text-gray-400">Mes projets</p>
+              <ProjectPicker
+                projects={projects}
+                onOpen={handleOpen}
+                onNew={handleFile}
+                onRename={renameProject}
+                onDelete={deleteProject}
+              />
             </div>
+          ) : (
+            <>
+              <FileUpload onFile={handleFile} />
+              {error && (
+                <div className="mt-4 p-4 bg-red-950 border border-red-800 rounded-xl text-red-400 text-sm">
+                  {error}
+                </div>
+              )}
+            </>
           )}
         </div>
       )}
 
-      {result && (
+      {/* Main view — project loaded */}
+      {activeProject && result && (
         <div className="flex flex-col min-h-screen">
           {/* Header */}
           <div className="px-10 py-4 flex items-center justify-between gap-6 border-b border-gray-800">
             <Logo />
-            <p className="text-sm text-gray-500 truncate flex-1 text-center">{filename}</p>
+            <div className="flex flex-col items-center gap-1 flex-1 min-w-0">
+              <p className="text-sm text-gray-300 truncate font-medium">{activeProject.name}</p>
+              <div className="flex items-center gap-2 text-xs text-gray-500">
+                <span>{(result.totalDistance / 1000).toFixed(1)} km</span>
+                <span className="text-gray-700">·</span>
+                <span>+{Math.round(result.totalGain)} m</span>
+                <span className="text-gray-700">·</span>
+                <span>-{Math.round(result.totalLoss)} m</span>
+              </div>
+            </div>
             <button
-              onClick={reset}
+              onClick={() => setPickerOpen(true)}
               className="text-sm text-gray-500 hover:text-gray-200 underline shrink-0"
             >
-              Charger un autre fichier
+              Mes projets
             </button>
           </div>
 
@@ -143,18 +191,14 @@ export default function App() {
               </TabsList>
             </div>
 
-            {/* Tab content */}
             <div className="px-10 py-6 pb-10 flex flex-col gap-6">
-              <TabsContent value="profil" className="mt-0 flex flex-col gap-6">
+              <TabsContent value="pentes" className="mt-0 flex flex-col gap-6">
                 <SummaryStats result={result} />
                 <ElevationProfile
                   sections={result.sections}
                   profilePoints={result.profilePoints}
                   slopeHexFn={dynamicSlopeHex}
                 />
-              </TabsContent>
-
-              <TabsContent value="distribution" className="mt-0 flex flex-col gap-6">
                 <div>
                   <button
                     onClick={() => setShowThresholdConfig(v => !v)}
@@ -200,16 +244,36 @@ export default function App() {
 
               <TabsContent value="ravitaillements" className="mt-0">
                 <AidStationPlanner
+                  key={activeProject.id}
                   sections={result.sections}
                   profilePoints={result.profilePoints}
                   totalDistance={result.totalDistance}
                   slopeHexFn={dynamicSlopeHex}
+                  initialNutritionState={activeProject}
+                  onNutritionStateChange={handleNutritionStateChange}
                 />
               </TabsContent>
             </div>
           </Tabs>
         </div>
       )}
+
+      {/* Project picker dialog */}
+      <Dialog open={pickerOpen} onOpenChange={setPickerOpen}>
+        <DialogContent className="bg-gray-900 border-gray-700 max-w-xl w-full">
+          <DialogHeader>
+            <DialogTitle className="text-gray-100">Mes projets</DialogTitle>
+          </DialogHeader>
+          <ProjectPicker
+            projects={projects}
+            activeProjectId={activeProject?.id}
+            onOpen={handleOpen}
+            onNew={handleFile}
+            onRename={renameProject}
+            onDelete={deleteProject}
+          />
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
