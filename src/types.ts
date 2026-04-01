@@ -1,7 +1,7 @@
 export interface TrackPoint {
+  ele: number;
   lat: number;
   lon: number;
-  ele: number;
 }
 
 export interface Section {
@@ -12,13 +12,13 @@ export interface Section {
 }
 
 export interface SlopeBucket {
-  label: string;
-  minSlope: number;
-  maxSlope: number;
-  distance: number; // meters
-  sectionCount: number;
-  percentage: number; // % of total trace
   color: string; // Tailwind bg class
+  distance: number; // meters
+  label: string;
+  maxSlope: number;
+  minSlope: number;
+  percentage: number; // % of total trace
+  sectionCount: number;
   textColor: string; // Tailwind text class
 }
 
@@ -28,61 +28,63 @@ export interface ProfilePoint {
 }
 
 export interface AnalysisResult {
-  sections: Section[];
-  profilePoints: ProfilePoint[];
-  uphillBuckets: SlopeBucket[];
   downhillBuckets: SlopeBucket[];
+  profilePoints: ProfilePoint[];
+  sections: Section[];
   totalDistance: number; // meters
   totalGain: number; // meters
   totalLoss: number; // meters
+  uphillBuckets: SlopeBucket[];
 }
 
 export interface Segment {
-  type: 'climb' | 'descent' | 'rolling';
-  startIndex: number;      // index in sections array
-  endIndex: number;        // index in sections array (inclusive)
-  distance: number;        // meters
+  distance: number; // meters
   elevationChange: number; // meters (positive for climbs, negative for descents)
-  startDistance: number;    // cumulative distance from start (meters)
   endDistance: number;
-  startElevation: number;
   endElevation: number;
+  endIndex: number; // index in sections array (inclusive)
+  startDistance: number; // cumulative distance from start (meters)
+  startElevation: number;
+  startIndex: number; // index in sections array
+  type: "climb" | "descent" | "rolling";
 }
 
 export interface GapSectionResult {
-  sectionIndex: number;
-  distance: number;    // meters
-  slope: number;       // percent
-  costRatio: number;   // Cr(grade) / Cr(0)
+  actualPace: number; // s/km
   actualSpeed: number; // m/s
-  actualPace: number;  // s/km
+  costRatio: number; // Cr(grade) / Cr(0)
+  distance: number; // meters
+  sectionIndex: number;
   sectionTime: number; // seconds
+  slope: number; // percent
 }
 
 export interface GapSimulationResult {
-  sections: GapSectionResult[];
-  totalTime: number;         // seconds
   averageActualPace: number; // s/km
-  gapPace: number;           // s/km (input)
+  gapPace: number; // s/km (input)
+  sections: GapSectionResult[];
+  totalTime: number; // seconds
 }
 
 export interface AidStation {
-  id: string;                 // crypto.randomUUID()
-  distanceFromStart: number;  // meters
-  name: string;               // "Ravito 1", "Ravito 2", ...
+  distanceFromStart: number; // meters
+  id: string; // crypto.randomUUID()
+  name: string; // "Ravito 1", "Ravito 2", ...
 }
 
-export type FoodItemType = 'flask' | 'gel' | 'bar' | 'pill';
+export type FoodItemType = "flask" | "gel" | "bar" | "pill";
 
 export interface FoodItem {
+  caffeineMg: number; // mg per unit (0 if no caffeine)
+  carbsG: number; // g per unit (0 if flask without powder)
+  favorite?: boolean; // affiché dans la bande favoris
+  hasPowder: boolean; // only meaningful for flask
   id: string;
-  type: FoodItemType;
+  isCustom?: boolean; // false = aliment de base, true/undefined = créé par l'utilisateur
   name: string;
-  hasPowder: boolean;  // only meaningful for flask
-  carbsG: number;      // g per unit (0 if flask without powder)
-  sodiumMg: number;    // mg per unit (0 if flask without powder)
-  caffeineMg: number;  // mg per unit (0 if no caffeine)
-  waterMl: number;     // 500 for flask, 0 for gel/bar
+  sodiumMg: number; // mg per unit (0 if flask without powder)
+  type: FoodItemType;
+  waterMl: number; // 500 for flask, 0 for gel/bar
 }
 
 export interface LegFoodAssignment {
@@ -92,41 +94,51 @@ export interface LegFoodAssignment {
 
 export type LegNutritionPlan = Record<string, LegFoodAssignment[]>;
 
+export interface PlacedFoodItem {
+  distanceFromStart: number; // mètres — position absolue sur le parcours
+  foodItemId: string; // ref vers FoodItem.id
+  id: string; // crypto.randomUUID()
+}
+
+export type NutritionPlacements = PlacedFoodItem[];
+
 export interface HourlyTargets {
   carbsPerHour: number;
-  waterPerHour: number;
   sodiumPerHour: number;
-  caffeinePerHour: number;
+  waterPerHour: number;
 }
 
 export interface PaceSettings {
-  mode: 'vap' | 'duration';
-  sliderPace: number;
   durationInput: string;
+  mode: "vap" | "duration";
+  sliderPace: number;
 }
 
 export interface NutritionState {
   aidStations: AidStation[];
-  legNutritionPlan: LegNutritionPlan;
+  bodyWeightKg: number;
   foodLibrary: FoodItem[];
   hourlyTargets: HourlyTargets;
-  timeOverrides: Record<string, number>;
+  /** @deprecated use nutritionPlacements */
+  legNutritionPlan?: LegNutritionPlan;
+  nutritionPlacements: NutritionPlacements;
   paceSettings: PaceSettings;
+  timeOverrides: Record<string, number>;
 }
 
 export interface StoredProject extends NutritionState {
+  createdAt: number;
+  filename: string;
+  gpxText: string;
   id: string;
   name: string;
-  gpxText: string;
-  filename: string;
-  createdAt: number;
   updatedAt: number;
 }
 
 export interface ProjectMeta {
+  createdAt: number;
+  filename: string;
   id: string;
   name: string;
-  filename: string;
-  createdAt: number;
   updatedAt: number;
 }

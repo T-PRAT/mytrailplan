@@ -1,4 +1,4 @@
-import type { SlopeBucket } from '../types';
+import type { SlopeBucket } from "../types";
 
 interface Props {
   bucket: SlopeBucket;
@@ -12,18 +12,21 @@ export function HistogramBar({ bucket, maxDistance }: Props) {
 
   return (
     <div className="flex items-center gap-3">
-      <div className="w-16 text-right text-sm font-medium text-gray-500 shrink-0">
+      <div className="w-16 shrink-0 text-right font-medium text-gray-500 text-sm">
         {bucket.label}
       </div>
-      <div className="flex-1 h-7 bg-gray-800 rounded overflow-hidden">
+      <div className="h-7 flex-1 overflow-hidden rounded bg-gray-800">
         <div
           className={`h-full rounded transition-all duration-500 ${bucket.color}`}
           style={{ width: `${widthPct}%` }}
         />
       </div>
-      <div className="w-28 text-sm text-gray-300 shrink-0">
+      <div className="w-28 shrink-0 text-gray-300 text-sm">
         {bucket.distance > 0 ? (
-          <span><span className="font-semibold">{km} km</span> <span className="text-gray-500">({pct}%)</span></span>
+          <span>
+            <span className="font-semibold">{km} km</span>{" "}
+            <span className="text-gray-500">({pct}%)</span>
+          </span>
         ) : (
           <span className="text-gray-700">—</span>
         )}

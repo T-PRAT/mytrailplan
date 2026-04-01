@@ -1,74 +1,74 @@
 @import "tailwindcss";
 
 :root {
-  --bg-base:      #0E0E0E;
-  --bg-surface:   #161614;
-  --bg-elevated:  #1E1E1B;
-  --bg-overlay:   #282824;
+  --bg-base: #0e0e0e;
+  --bg-surface: #161614;
+  --bg-elevated: #1e1e1b;
+  --bg-overlay: #282824;
 
-  --text-primary:   #F0EDE5;
-  --text-secondary: #B0ADA5;
-  --text-muted:     #6E6C66;
-  --text-disabled:  #45443F;
+  --text-primary: #f0ede5;
+  --text-secondary: #b0ada5;
+  --text-muted: #6e6c66;
+  --text-disabled: #45443f;
 
-  --border-subtle:  #2A2A26;
-  --border-default: #3D3D37;
-  --border-strong:  #56554E;
+  --border-subtle: #2a2a26;
+  --border-default: #3d3d37;
+  --border-strong: #56554e;
 
-  --accent-teal:       #4AADAD;
-  --accent-ochre:      #E8C170;
-  --accent-terracotta: #E07B4F;
-  --accent-berry:      #8B1E3F;
+  --accent-teal: #4aadad;
+  --accent-ochre: #e8c170;
+  --accent-terracotta: #e07b4f;
+  --accent-berry: #8b1e3f;
 
-  --slope-n30: #1B3A4B;
-  --slope-n20: #2E6B8A;
-  --slope-n10: #4AADAD;
-  --slope-n5:  #7DCFB6;
-  --slope-0:   #E8E4D9;
-  --slope-p5:  #E8C170;
-  --slope-p10: #E07B4F;
-  --slope-p20: #C7453B;
-  --slope-p30: #8B1E3F;
+  --slope-n30: #1b3a4b;
+  --slope-n20: #2e6b8a;
+  --slope-n10: #4aadad;
+  --slope-n5: #7dcfb6;
+  --slope-0: #e8e4d9;
+  --slope-p5: #e8c170;
+  --slope-p10: #e07b4f;
+  --slope-p20: #c7453b;
+  --slope-p30: #8b1e3f;
 
   /* shadcn/ui CSS variables — dark palette */
-  --background: #0E0E0E;
-  --foreground: #F0EDE5;
+  --background: #0e0e0e;
+  --foreground: #f0ede5;
   --card: #161614;
-  --card-foreground: #F0EDE5;
-  --popover: #1E1E1B;
-  --popover-foreground: #F0EDE5;
-  --primary: #F0EDE5;
-  --primary-foreground: #0E0E0E;
-  --secondary: #1E1E1B;
-  --secondary-foreground: #F0EDE5;
-  --muted: #1E1E1B;
-  --muted-foreground: #6E6C66;
+  --card-foreground: #f0ede5;
+  --popover: #1e1e1b;
+  --popover-foreground: #f0ede5;
+  --primary: #f0ede5;
+  --primary-foreground: #0e0e0e;
+  --secondary: #1e1e1b;
+  --secondary-foreground: #f0ede5;
+  --muted: #1e1e1b;
+  --muted-foreground: #6e6c66;
   --accent: #282824;
-  --accent-foreground: #F0EDE5;
-  --destructive: #C7453B;
-  --destructive-foreground: #F0EDE5;
-  --border: #3D3D37;
-  --input: #3D3D37;
-  --ring: #56554E;
+  --accent-foreground: #f0ede5;
+  --destructive: #c7453b;
+  --destructive-foreground: #f0ede5;
+  --border: #3d3d37;
+  --input: #3d3d37;
+  --ring: #56554e;
   --radius: 0.5rem;
 }
 
 @theme {
-  --color-gray-950: #0E0E0E;
+  --color-gray-950: #0e0e0e;
   --color-gray-900: #161614;
-  --color-gray-800: #1E1E1B;
-  --color-gray-700: #3D3D37;
-  --color-gray-600: #56554E;
-  --color-gray-500: #6E6C66;
-  --color-gray-400: #B0ADA5;
-  --color-gray-300: #B0ADA5;
-  --color-gray-200: #F0EDE5;
-  --color-gray-100: #F0EDE5;
+  --color-gray-800: #1e1e1b;
+  --color-gray-700: #3d3d37;
+  --color-gray-600: #56554e;
+  --color-gray-500: #6e6c66;
+  --color-gray-400: #b0ada5;
+  --color-gray-300: #b0ada5;
+  --color-gray-200: #f0ede5;
+  --color-gray-100: #f0ede5;
 
-  --color-blue-400: #4AADAD;
-  --color-blue-950: #0D1F1F;
+  --color-blue-400: #4aadad;
+  --color-blue-950: #0d1f1f;
 
   --color-red-950: #1a0808;
-  --color-red-800: #8B1E3F;
-  --color-red-400: #E07B4F;
+  --color-red-800: #8b1e3f;
+  --color-red-400: #e07b4f;
 }

@@ -1,6 +1,12 @@
-import type { TrackPoint, Section, SlopeBucket, AnalysisResult, ProfilePoint } from '../types';
-import { haversine } from './haversine';
-import { UPHILL_COLORS, DOWNHILL_COLORS } from './colors';
+import type {
+  AnalysisResult,
+  ProfilePoint,
+  Section,
+  SlopeBucket,
+  TrackPoint,
+} from "../types";
+import { DOWNHILL_COLORS, UPHILL_COLORS } from "./colors";
+import { haversine } from "./haversine";
 
 const SECTION_LENGTH = 100; // meters
 const MIN_TAIL_LENGTH = 10; // meters — discard shorter trailing sections
@@ -20,7 +26,10 @@ function smoothElevations(points: TrackPoint[]): TrackPoint[] {
   return points.map((pt, idx) => {
     let weightedEle = 0;
     for (let k = 0; k < kernel.length; k++) {
-      const j = Math.min(Math.max(idx + k - SMOOTH_RADIUS, 0), points.length - 1);
+      const j = Math.min(
+        Math.max(idx + k - SMOOTH_RADIUS, 0),
+        points.length - 1
+      );
       weightedEle += kernel[k] * points[j].ele;
     }
     return { ...pt, ele: weightedEle / kernelSum };
@@ -28,11 +37,11 @@ function smoothElevations(points: TrackPoint[]): TrackPoint[] {
 }
 
 const BUCKETS = [
-  { label: '0–5%',   min: 0,  max: 5 },
-  { label: '5–10%',  min: 5,  max: 10 },
-  { label: '10–20%', min: 10, max: 20 },
-  { label: '20–30%', min: 20, max: 30 },
-  { label: '30%+',   min: 30, max: Infinity },
+  { label: "0–5%", min: 0, max: 5 },
+  { label: "5–10%", min: 5, max: 10 },
+  { label: "10–20%", min: 10, max: 20 },
+  { label: "20–30%", min: 20, max: 30 },
+  { label: "30%+", min: 30, max: Number.POSITIVE_INFINITY },
 ];
 
 function makeBuckets(colors: typeof UPHILL_COLORS): SlopeBucket[] {
@@ -50,7 +59,9 @@ function makeBuckets(colors: typeof UPHILL_COLORS): SlopeBucket[] {
 
 function bucketIndex(absSlope: number): number {
   for (let i = 0; i < BUCKETS.length; i++) {
-    if (absSlope < BUCKETS[i].max) return i;
+    if (absSlope < BUCKETS[i].max) {
+      return i;
+    }
   }
   return BUCKETS.length - 1;
 }
@@ -58,7 +69,9 @@ function bucketIndex(absSlope: number): number {
 export function analyze(rawPoints: TrackPoint[]): AnalysisResult {
   const points = smoothElevations(rawPoints);
   const sections: Section[] = [];
-  const profilePoints: ProfilePoint[] = [{ cumulativeDistance: 0, elevation: points[0].ele }];
+  const profilePoints: ProfilePoint[] = [
+    { cumulativeDistance: 0, elevation: points[0].ele },
+  ];
   let accDist = 0;
   let accGain = 0;
   let accLoss = 0;
@@ -66,20 +79,36 @@ export function analyze(rawPoints: TrackPoint[]): AnalysisResult {
   let sectionStartEle = points[0].ele;
 
   for (let i = 1; i < points.length; i++) {
-    const d = haversine(points[i - 1].lat, points[i - 1].lon, points[i].lat, points[i].lon);
+    const d = haversine(
+      points[i - 1].lat,
+      points[i - 1].lon,
+      points[i].lat,
+      points[i].lon
+    );
     const dEle = points[i].ele - points[i - 1].ele;
     accDist += d;
-    if (dEle > 0) accGain += dEle;
-    else accLoss += Math.abs(dEle);
+    if (dEle > 0) {
+      accGain += dEle;
+    } else {
+      accLoss += Math.abs(dEle);
+    }
 
     if (accDist >= SECTION_LENGTH || i === points.length - 1) {
       // Finalize section only if long enough (or last section above min)
       if (accDist >= MIN_TAIL_LENGTH || i < points.length - 1) {
         const netEle = points[i].ele - sectionStartEle;
         const slope = (netEle / accDist) * 100;
-        sections.push({ distance: accDist, elevationGain: accGain, elevationLoss: accLoss, slope });
+        sections.push({
+          distance: accDist,
+          elevationGain: accGain,
+          elevationLoss: accLoss,
+          slope,
+        });
         totalCumulativeDist += accDist;
-        profilePoints.push({ cumulativeDistance: totalCumulativeDist, elevation: points[i].ele });
+        profilePoints.push({
+          cumulativeDistance: totalCumulativeDist,
+          elevation: points[i].ele,
+        });
       }
       // Reset accumulators
       accDist = 0;
@@ -112,44 +141,68 @@ export function analyze(rawPoints: TrackPoint[]): AnalysisResult {
     b.percentage = totalDistance > 0 ? (b.distance / totalDistance) * 100 : 0;
   }
 
-  return { sections, profilePoints, uphillBuckets, downhillBuckets, totalDistance, totalGain, totalLoss };
+  return {
+    sections,
+    profilePoints,
+    uphillBuckets,
+    downhillBuckets,
+    totalDistance,
+    totalGain,
+    totalLoss,
+  };
 }
 
 export function classifyIntoBuckets(
-  sections: ReturnType<typeof analyze>['sections'],
+  sections: ReturnType<typeof analyze>["sections"],
   thresholds: number[],
   totalDistance: number,
   uphillHexColors: string[],
-  downhillHexColors: string[],
-): { uphillBuckets: import('../types').SlopeBucket[]; downhillBuckets: import('../types').SlopeBucket[] } {
+  downhillHexColors: string[]
+): {
+  uphillBuckets: import("../types").SlopeBucket[];
+  downhillBuckets: import("../types").SlopeBucket[];
+} {
   const sorted = [...thresholds].sort((a, b) => a - b);
   const n = sorted.length + 1;
 
   function makeLabel(i: number): string {
-    if (i === 0) return `0–${sorted[0]}%`;
-    if (i === n - 1) return `${sorted[sorted.length - 1]}%+`;
+    if (i === 0) {
+      return `0–${sorted[0]}%`;
+    }
+    if (i === n - 1) {
+      return `${sorted.at(-1)}%+`;
+    }
     return `${sorted[i - 1]}–${sorted[i]}%`;
   }
 
-  function makeBucket(i: number, colors: string[]): import('../types').SlopeBucket {
+  function makeBucket(
+    i: number,
+    colors: string[]
+  ): import("../types").SlopeBucket {
     return {
       label: makeLabel(i),
       minSlope: i === 0 ? 0 : sorted[i - 1],
-      maxSlope: i === n - 1 ? Infinity : sorted[i],
+      maxSlope: i === n - 1 ? Number.POSITIVE_INFINITY : sorted[i],
       distance: 0,
       sectionCount: 0,
       percentage: 0,
       color: colors[i],
-      textColor: '#ffffff',
+      textColor: "#ffffff",
     };
   }
 
-  const uphillBuckets = Array.from({ length: n }, (_, i) => makeBucket(i, uphillHexColors));
-  const downhillBuckets = Array.from({ length: n }, (_, i) => makeBucket(i, downhillHexColors));
+  const uphillBuckets = Array.from({ length: n }, (_, i) =>
+    makeBucket(i, uphillHexColors)
+  );
+  const downhillBuckets = Array.from({ length: n }, (_, i) =>
+    makeBucket(i, downhillHexColors)
+  );
 
   function bucketIdx(absSlope: number): number {
     for (let i = 0; i < sorted.length; i++) {
-      if (absSlope < sorted[i]) return i;
+      if (absSlope < sorted[i]) {
+        return i;
+      }
     }
     return n - 1;
   }
