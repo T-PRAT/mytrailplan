@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="TrailPrep E2E Tests">
+  <trk>
+    <name>Sample Trail</name>
+    <trkseg>
+      <!-- Départ plat -->
+      <trkpt lat="45.0000" lon="6.0000"><ele>1000</ele></trkpt>
+      <trkpt lat="45.0010" lon="6.0010"><ele>1002</ele></trkpt>
+      <trkpt lat="45.0020" lon="6.0020"><ele>1005</ele></trkpt>
+      <trkpt lat="45.0030" lon="6.0030"><ele>1008</ele></trkpt>
+      <trkpt lat="45.0040" lon="6.0040"><ele>1010</ele></trkpt>
+      <!-- Montée modérée ~8% -->
+      <trkpt lat="45.0050" lon="6.0050"><ele>1025</ele></trkpt>
+      <trkpt lat="45.0060" lon="6.0060"><ele>1042</ele></trkpt>
+      <trkpt lat="45.0070" lon="6.0070"><ele>1058</ele></trkpt>
+      <trkpt lat="45.0080" lon="6.0080"><ele>1075</ele></trkpt>
+      <trkpt lat="45.0090" lon="6.0090"><ele>1090</ele></trkpt>
+      <!-- Montée raide ~15% -->
+      <trkpt lat="45.0100" lon="6.0100"><ele>1115</ele></trkpt>
+      <trkpt lat="45.0110" lon="6.0110"><ele>1142</ele></trkpt>
+      <trkpt lat="45.0120" lon="6.0120"><ele>1168</ele></trkpt>
+      <trkpt lat="45.0130" lon="6.0130"><ele>1195</ele></trkpt>
+      <trkpt lat="45.0140" lon="6.0140"><ele>1220</ele></trkpt>
+      <!-- Sommet / plat -->
+      <trkpt lat="45.0150" lon="6.0150"><ele>1225</ele></trkpt>
+      <trkpt lat="45.0160" lon="6.0160"><ele>1228</ele></trkpt>
+      <trkpt lat="45.0170" lon="6.0170"><ele>1230</ele></trkpt>
+      <trkpt lat="45.0180" lon="6.0180"><ele>1228</ele></trkpt>
+      <trkpt lat="45.0190" lon="6.0190"><ele>1225</ele></trkpt>
+      <!-- Descente modérée ~8% -->
+      <trkpt lat="45.0200" lon="6.0200"><ele>1210</ele></trkpt>
+      <trkpt lat="45.0210" lon="6.0210"><ele>1193</ele></trkpt>
+      <trkpt lat="45.0220" lon="6.0220"><ele>1178</ele></trkpt>
+      <trkpt lat="45.0230" lon="6.0230"><ele>1162</ele></trkpt>
+      <trkpt lat="45.0240" lon="6.0240"><ele>1148</ele></trkpt>
+      <!-- Descente raide ~18% -->
+      <trkpt lat="45.0250" lon="6.0250"><ele>1120</ele></trkpt>
+      <trkpt lat="45.0260" lon="6.0260"><ele>1088</ele></trkpt>
+      <trkpt lat="45.0270" lon="6.0270"><ele>1058</ele></trkpt>
+      <trkpt lat="45.0280" lon="6.0280"><ele>1030</ele></trkpt>
+      <trkpt lat="45.0290" lon="6.0290"><ele>1005</ele></trkpt>
+      <!-- Retour plat -->
+      <trkpt lat="45.0300" lon="6.0300"><ele>1002</ele></trkpt>
+      <trkpt lat="45.0310" lon="6.0310"><ele>1000</ele></trkpt>
+      <trkpt lat="45.0320" lon="6.0320"><ele>1000</ele></trkpt>
+      <!-- Deuxième montée pour avoir D+ intéressant -->
+      <trkpt lat="45.0330" lon="6.0330"><ele>1015</ele></trkpt>
+      <trkpt lat="45.0340" lon="6.0340"><ele>1035</ele></trkpt>
+      <trkpt lat="45.0350" lon="6.0350"><ele>1060</ele></trkpt>
+      <trkpt lat="45.0360" lon="6.0360"><ele>1080</ele></trkpt>
+      <!-- Redescente finale -->
+      <trkpt lat="45.0370" lon="6.0370"><ele>1060</ele></trkpt>
+      <trkpt lat="45.0380" lon="6.0380"><ele>1038</ele></trkpt>
+      <trkpt lat="45.0390" lon="6.0390"><ele>1018</ele></trkpt>
+      <trkpt lat="45.0400" lon="6.0400"><ele>1000</ele></trkpt>
+    </trkseg>
+  </trk>
+</gpx>
