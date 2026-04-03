@@ -13,7 +13,9 @@ import type { FoodItem, FoodItemType, NutritionPlacements } from "../../types";
 
 interface Props {
   armedFoodId: string | null;
+  disableArm?: boolean;
   foodLibrary: FoodItem[];
+  openTrigger?: number;
   nutritionPlacements: NutritionPlacements;
   onArmFood: (id: string) => void;
   setFoodLibrary: (fn: (prev: FoodItem[]) => FoodItem[]) => void;
@@ -22,8 +24,9 @@ interface Props {
   ) => void;
 }
 
-const TYPE_CONFIG: { type: FoodItemType; label: string; icon: string }[] = [
-  { type: "flask", label: "Flasque 500 mL", icon: "/food/water.png" },
+const TYPE_CONFIG: { type: FoodItemType; label: string; icon: string; hasPowder?: boolean }[] = [
+  { type: "flask", label: "Flasque eau", icon: "/food/water.png" },
+  { type: "flask", label: "Flasque isotonique", icon: "/food/iso.png", hasPowder: true },
   { type: "gel", label: "Gel", icon: "/food/gel.png" },
   { type: "bar", label: "Barre", icon: "/food/bar.png" },
   { type: "pill", label: "Comprimé", icon: "/food/pill.png" },
@@ -328,8 +331,14 @@ export function FoodLibrary({
   setNutritionPlacements,
   armedFoodId,
   onArmFood,
+  openTrigger = 0,
+  disableArm = false,
 }: Props) {
   const [isOpen, setIsOpen] = useState(false);
+
+  useEffect(() => {
+    if (openTrigger > 0) setIsOpen(true);
+  }, [openTrigger]);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [showTypePicker, setShowTypePicker] = useState(false);
   const [dragOverFavorites, setDragOverFavorites] = useState(false);
@@ -361,20 +370,20 @@ export function FoodLibrary({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [showTypePicker]);
 
-  function addItem(type: FoodItemType) {
+  function addItem(type: FoodItemType, hasPowder = false) {
     const newItem: FoodItem = {
       id: crypto.randomUUID(),
       type,
       name:
         (
           {
-            flask: "Flasque",
+            flask: hasPowder ? "Flasque isotonique" : "Flasque eau",
             gel: "Gel",
             bar: "Barre",
             tablet: "Comprimé",
           } as Record<string, string>
         )[type] ?? "Aliment",
-      hasPowder: false,
+      hasPowder,
       carbsG: 0,
       sodiumMg: 0,
       caffeineMg: 0,
@@ -461,14 +470,14 @@ export function FoodLibrary({
 
       {/* Drawer */}
       {isOpen && (
-        <div className="fixed inset-0 z-50 flex justify-end">
+        <div className="fixed inset-0 z-[60] flex justify-end">
           <button
             aria-label="Fermer la bibliothèque"
             className="absolute inset-0 cursor-default bg-black/60"
             onClick={() => setIsOpen(false)}
             type="button"
           />
-          <div className="relative flex h-full w-96 max-w-[92vw] flex-col border-gray-700 border-l bg-gray-900 shadow-2xl">
+          <div aria-label="Bibliothèque d'aliments" className="relative flex h-full w-96 max-w-[92vw] flex-col border-gray-700 border-l bg-gray-900 shadow-2xl" role="dialog">
             {/* Header */}
             <div className="flex shrink-0 items-center justify-between border-gray-700 border-b px-4 py-3">
               <div className="flex items-center gap-2">
@@ -513,10 +522,10 @@ export function FoodLibrary({
                   <div className="flex flex-wrap gap-3">
                     {favorites.map((item) => (
                       <FavoriteCard
-                        isArmed={armedFoodId === item.id}
+                        isArmed={!disableArm && armedFoodId === item.id}
                         item={item}
                         key={item.id}
-                        onArm={() => {
+                        onArm={disableArm ? () => {} : () => {
                           onArmFood(item.id);
                           setIsOpen(false);
                         }}
@@ -617,11 +626,11 @@ export function FoodLibrary({
 
                     {showTypePicker && (
                       <div className="absolute top-full left-0 z-20 mt-1 flex min-w-44 flex-col overflow-hidden rounded-xl border border-gray-700 bg-gray-800 shadow-lg">
-                        {TYPE_CONFIG.map(({ type, label, icon }) => (
+                        {TYPE_CONFIG.map(({ type, label, icon, hasPowder }) => (
                           <button
                             className="flex items-center gap-2.5 px-3 py-2 text-left text-gray-300 text-sm transition-colors hover:bg-gray-700 hover:text-gray-100"
-                            key={type}
-                            onClick={() => addItem(type)}
+                            key={label}
+                            onClick={() => addItem(type, hasPowder)}
                             type="button"
                           >
                             <img

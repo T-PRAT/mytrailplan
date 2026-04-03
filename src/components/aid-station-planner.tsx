@@ -1,5 +1,6 @@
-import { Pencil, RotateCcw, Star, Trash2, X } from "lucide-react";
+import { Pencil, Printer, RotateCcw, Trash2, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useReactToPrint } from "react-to-print";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -24,6 +25,8 @@ import {
 import type {
   AidStation,
   FoodItem,
+  LegNutritionPlan,
+  NutritionMode,
   NutritionPlacements,
   NutritionState,
   PlacedFoodItem,
@@ -31,12 +34,17 @@ import type {
   Section,
 } from "../types";
 import { FoodLibrary } from "./aid-station/food-library";
+import { LegNutritionPanel } from "./aid-station/leg-nutrition-panel";
+// import { NormalModeLegs } from "./aid-station/normal-mode-legs"; // TODO: à réintégrer quand le mode avancé sera déployé
 import { NutritionRateChart } from "./aid-station/nutrition-rate-chart";
 import type { CaffeineIntake } from "./aid-station/nutrition-utils";
 import {
   computeCaffeineTimeline,
+  computeLegNutrition,
   computeNutritionFromPlacements,
   getDefaultFoodLibrary,
+  migrateLegPlanToPlacements,
+  migratePlacementsToLegPlan,
 } from "./aid-station/nutrition-utils";
 import { computeRollingRate } from "./aid-station/rate-utils";
 
@@ -68,19 +76,22 @@ interface Leg {
   toName: string;
 }
 
-const PAD_LEFT = 8;
-const PAD_RIGHT = 16;
-const PAD_TOP = 16;
+const PAD_LEFT = 16;
+const PAD_RIGHT = 24;
+const PAD_TOP = 30;
 const VIEW_W = 800;
 const CHART_W = VIEW_W - PAD_LEFT - PAD_RIGHT;
-const CHART_H = 55;
+const CHART_H = 72;
 const FOOD_LANE_H = 44;
 const FOOD_ICON_SIZE = 22;
 const FOOD_LANE_Y = PAD_TOP + CHART_H + 4;
-const STATS_LANE_H = 28;
-const STATS_LANE_Y = FOOD_LANE_Y + FOOD_LANE_H + 4;
-const X_LABEL_Y = STATS_LANE_Y + STATS_LANE_H + 2;
-const VIEW_H_PROFILE = X_LABEL_Y + 14 + 8;
+const STATS_LANE_H = 62;
+const STATS_LANE_Y_ADVANCED = FOOD_LANE_Y + FOOD_LANE_H + 4;
+const STATS_LANE_Y_NORMAL = PAD_TOP + CHART_H + 4;
+const X_LABEL_Y_ADVANCED = STATS_LANE_Y_ADVANCED + STATS_LANE_H + 2;
+const X_LABEL_Y_NORMAL = STATS_LANE_Y_NORMAL + STATS_LANE_H + 2;
+const VIEW_H_PROFILE_ADVANCED = X_LABEL_Y_ADVANCED + 14 + 16;
+const VIEW_H_PROFILE_NORMAL = X_LABEL_Y_NORMAL + 14 + 16;
 
 const DEFAULT_GAP_PACE = 360;
 const SLIDER_MIN = 180;
@@ -176,7 +187,7 @@ export function AidStationPlanner({
   const [aidStations, setAidStations] = useState<AidStation[]>(
     () => initialNutritionState?.aidStations ?? []
   );
-  const [mode, setMode] = useState<"vap" | "duration">(
+  const [mode, _setMode] = useState<"vap" | "duration">(
     () => initialNutritionState?.paceSettings.mode ?? "vap"
   );
   const [sliderPace, setSliderPace] = useState(
@@ -187,7 +198,8 @@ export function AidStationPlanner({
   );
   const [hover, setHover] = useState<HoverState | null>(null);
   const [dragId, setDragId] = useState<string | null>(null);
-  const [hoveredLegIdx, setHoveredLegIdx] = useState<number | null>(null);
+  const [hoveredWarningLegIdx, setHoveredWarningLegIdx] = useState<number | null>(null);
+  const [foodLibraryTrigger, setFoodLibraryTrigger] = useState(0);
   const [carbsPerHour, setCarbsPerHour] = useState(
     () => initialNutritionState?.hourlyTargets.carbsPerHour ?? 60
   );
@@ -225,6 +237,16 @@ export function AidStationPlanner({
   const [selectedFoodPlacementId, setSelectedFoodPlacementId] = useState<
     string | null
   >(null);
+  const [nutritionMode, setNutritionMode] = useState<NutritionMode>(
+    () => initialNutritionState?.nutritionMode ?? "normal"
+  );
+  const [legNutritionPlan, setLegNutritionPlan] = useState<LegNutritionPlan>(
+    () => initialNutritionState?.legNutritionPlan ?? {}
+  );
+  const [legNotes, setLegNotes] = useState<Record<string, string>>(
+    () => initialNutritionState?.legNotes ?? {}
+  );
+  const [pendingMode, setPendingMode] = useState<NutritionMode | null>(null);
 
   const isFirstRender = useRef(true);
   useEffect(() => {
@@ -240,6 +262,9 @@ export function AidStationPlanner({
       timeOverrides,
       paceSettings: { mode, sliderPace, durationInput },
       bodyWeightKg,
+      nutritionMode,
+      legNutritionPlan,
+      legNotes,
     });
   }, [
     aidStations,
@@ -253,6 +278,9 @@ export function AidStationPlanner({
     sliderPace,
     durationInput,
     bodyWeightKg,
+    nutritionMode,
+    legNutritionPlan,
+    legNotes,
     onNutritionStateChange,
   ]);
   const [confirmDeleteStationId, setConfirmDeleteStationId] = useState<
@@ -267,6 +295,66 @@ export function AidStationPlanner({
   const didDragRef = useRef(false);
   const markerDragStartXRef = useRef(0);
   const foodDragMovedRef = useRef(false);
+  const durationFocused = useRef(false);
+  const printRef = useRef<HTMLDivElement>(null);
+  const handlePrint = useReactToPrint({ contentRef: printRef });
+  const [printOptions, setPrintOptions] = useState({ chart: true, summary: true });
+
+  // Constantes SVG dépendantes du mode
+  const STATS_LANE_Y =
+    nutritionMode === "advanced" ? STATS_LANE_Y_ADVANCED : STATS_LANE_Y_NORMAL;
+  const X_LABEL_Y =
+    nutritionMode === "advanced" ? X_LABEL_Y_ADVANCED : X_LABEL_Y_NORMAL;
+  const VIEW_H_PROFILE =
+    nutritionMode === "advanced"
+      ? VIEW_H_PROFILE_ADVANCED
+      : VIEW_H_PROFILE_NORMAL;
+
+  function handleLegAddFood(legIdx: number, foodItemId: string) {
+    const key = legKey(legIdx);
+    setLegNutritionPlan((prev) => {
+      const assignments = [...(prev[key] ?? [])];
+      const existing = assignments.find((a) => a.foodItemId === foodItemId);
+      if (existing) {
+        return {
+          ...prev,
+          [key]: assignments.map((a) =>
+            a.foodItemId === foodItemId
+              ? { ...a, quantity: a.quantity + 1 }
+              : a
+          ),
+        };
+      }
+      return { ...prev, [key]: [...assignments, { foodItemId, quantity: 1 }] };
+    });
+  }
+
+  function handleLegRemoveFood(legIdx: number, foodItemId: string) {
+    const key = legKey(legIdx);
+    setLegNutritionPlan((prev) => {
+      const assignments = (prev[key] ?? [])
+        .map((a) =>
+          a.foodItemId === foodItemId ? { ...a, quantity: a.quantity - 1 } : a
+        )
+        .filter((a) => a.quantity > 0);
+      return { ...prev, [key]: assignments };
+    });
+  }
+
+  function confirmModeSwitch() {
+    if (!pendingMode) return;
+    if (pendingMode === "advanced") {
+      setNutritionPlacements(
+        migrateLegPlanToPlacements(legNutritionPlan, aidStations, totalDistance)
+      );
+    } else {
+      setLegNutritionPlan(
+        migratePlacementsToLegPlan(nutritionPlacements, aidStations, totalDistance)
+      );
+    }
+    setNutritionMode(pendingMode);
+    setPendingMode(null);
+  }
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
@@ -278,21 +366,9 @@ export function AidStationPlanner({
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
 
-  const parsedDuration = useMemo(
-    () => parseDuration(durationInput),
-    [durationInput]
-  );
-  const durationInvalid = durationInput.length > 0 && parsedDuration === null;
+  const durationInvalid = durationInput.length > 0 && parseDuration(durationInput) === null;
 
-  const gapPace = useMemo(() => {
-    if (mode === "vap") {
-      return sliderPace;
-    }
-    if (parsedDuration) {
-      return gapPaceFromTime(sections, parsedDuration);
-    }
-    return null;
-  }, [mode, sliderPace, parsedDuration, sections]);
+  const gapPace = sliderPace;
 
   const legs = useMemo(() => {
     if (!gapPace) {
@@ -381,13 +457,6 @@ export function AidStationPlanner({
       colorGroups.push({ color, start: i, end: i });
     }
   }
-  const yBase = toY(yMin);
-
-  // Aire grise unifiée (fond du profil)
-  const fillPoints = profilePoints
-    .map((p) => `${toX(p.cumulativeDistance)},${toY(p.elevation)}`)
-    .join(" L");
-  const fillPath = `M ${fillPoints} L${toX(totalDistance)},${yBase} L${toX(0)},${yBase} Z`;
 
   // Segments de ligne colorés par pente (remplace l'ancien outline uniforme)
   const coloredLines = colorGroups.map((g, _gi) => {
@@ -477,6 +546,17 @@ export function AidStationPlanner({
         )
       );
       return;
+    }
+
+    // N'afficher la bulle que si la souris est sur la zone du profil altimétrique
+    const svgRect = svgRef.current?.getBoundingClientRect();
+    if (svgRect) {
+      const relY = e.clientY - svgRect.top;
+      const svgY = (relY / svgRect.height) * VIEW_H_PROFILE;
+      if (svgY < PAD_TOP || svgY > PAD_TOP + CHART_H) {
+        setHover(null);
+        return;
+      }
     }
 
     const idx = getSectionAtDist(distM);
@@ -681,6 +761,13 @@ export function AidStationPlanner({
 
   const totalTime = effectiveLegs.reduce((s, l) => s + l.time, 0);
 
+  // Sync duration input from slider when user isn't typing in the field
+  useEffect(() => {
+    if (!durationFocused.current && totalTime > 0) {
+      setDurationInput(formatTime(totalTime));
+    }
+  }, [totalTime]);
+
   // --- Caffeine timeline ---
   const { caffeineTimeline, caffeineIntakes, maxCaffeineConc } = useMemo(() => {
     // Chaque aliment avec caféine contribue au moment de sa position sur le parcours
@@ -865,364 +952,227 @@ export function AidStationPlanner({
 
   return (
     <div className="flex flex-col gap-5 rounded-xl border border-gray-700 bg-gray-900 p-6">
-      <div className="flex items-center justify-between gap-3">
-        <h2 className="font-semibold text-base text-gray-200">
-          Ravitaillements
-        </h2>
-        <div className="flex items-center gap-2">
-          {armedFoodId && (
-            <span className="text-teal-400 text-xs">
-              Cliquer sur le profil pour placer · Échap pour annuler
-            </span>
-          )}
-          {showAddStation ? (
-            <form
-              className="flex items-center gap-1.5"
-              onSubmit={(e) => {
-                e.preventDefault();
-                confirmAddStation();
-              }}
-            >
-              <div className="flex h-8 items-center overflow-hidden rounded-lg border border-gray-600 bg-gray-800">
-                <input
-                  autoFocus
-                  className="w-28 border-gray-700 border-r bg-transparent px-2.5 text-gray-100 text-sm placeholder-gray-600 outline-none"
-                  onChange={(e) => setAddStationName(e.target.value)}
-                  placeholder="Nom (optionnel)"
-                  type="text"
-                  value={addStationName}
-                />
-                <input
-                  className="w-16 bg-transparent px-2.5 text-gray-100 text-sm placeholder-gray-600 outline-none"
-                  onChange={(e) => setAddStationKm(e.target.value)}
-                  placeholder="km"
-                  type="text"
-                  value={addStationKm}
-                />
-                <span className="pr-2 text-gray-500 text-xs">
-                  / {(totalDistance / 1000).toFixed(1)} km
+      <h2 className="font-semibold text-base text-gray-200">
+        Plan de course
+      </h2>
+
+      {/* Contrôles — ligne unique */}
+      <p className="font-medium text-[10px] text-gray-600 uppercase tracking-widest">Paramètres</p>
+      <div className="flex flex-wrap items-start gap-6">
+
+        {/* VAP / Durée */}
+        <div className="flex flex-col gap-2">
+          <div className="flex w-72 flex-col gap-2">
+            {/* VAP */}
+            <div className="flex flex-col gap-1.5">
+              <div className="flex items-center justify-between">
+                <span className="text-gray-500 text-xs">VAP cible</span>
+                <span className="font-semibold text-gray-100 text-sm">
+                  {formatPace(sliderPace)}
+                  <span className="font-normal text-gray-500 text-xs"> /km</span>
                 </span>
               </div>
-              <button
-                className="h-8 rounded-lg bg-teal-700 px-3 font-medium text-white text-xs transition-colors hover:bg-teal-600"
-                type="submit"
-              >
-                Ajouter
-              </button>
-              <button
-                className="h-8 px-2 text-gray-500 transition-colors hover:text-gray-300"
-                onClick={() => {
-                  setShowAddStation(false);
-                  setAddStationKm("");
-                }}
-                type="button"
-              >
-                <X size={14} />
-              </button>
-            </form>
-          ) : (
-            <button
-              className="flex h-8 items-center gap-1.5 rounded-lg border border-gray-700 bg-gray-800 px-3 font-medium text-gray-300 text-xs transition-colors hover:bg-gray-700"
-              onClick={() => setShowAddStation(true)}
-              type="button"
-            >
-              <span className="text-base leading-none">+</span> Ravito
-            </button>
-          )}
-        </div>
-      </div>
+              <Slider
+                className="w-full"
+                max={SLIDER_MAX}
+                min={SLIDER_MIN}
+                onValueChange={(vals) => setSliderPace(vals[0])}
+                step={5}
+                value={[sliderPace]}
+              />
+              <div className="flex justify-between text-[10px] text-gray-700">
+                <span>{formatPace(SLIDER_MIN)}/km</span>
+                <span>{formatPace(SLIDER_MAX)}/km</span>
+              </div>
+            </div>
 
-      {/* Contrôles VAP/durée */}
-      <div className="flex flex-col gap-3">
-        <div className="flex w-fit items-center gap-1 rounded-lg bg-gray-800 p-1">
-          <Button
-            className={[
-              "h-auto rounded-md px-3 py-1 font-medium text-sm transition-colors",
-              mode === "vap"
-                ? "bg-gray-700 text-gray-100 hover:bg-gray-700 hover:text-gray-100"
-                : "text-gray-500 hover:bg-transparent hover:text-gray-300",
-            ].join(" ")}
-            onClick={() => setMode("vap")}
-            size="sm"
-            variant="ghost"
-          >
-            VAP cible
-          </Button>
-          <Button
-            className={[
-              "h-auto rounded-md px-3 py-1 font-medium text-sm transition-colors",
-              mode === "duration"
-                ? "bg-gray-700 text-gray-100 hover:bg-gray-700 hover:text-gray-100"
-                : "text-gray-500 hover:bg-transparent hover:text-gray-300",
-            ].join(" ")}
-            onClick={() => setMode("duration")}
-            size="sm"
-            variant="ghost"
-          >
-            Durée cible
-          </Button>
-        </div>
-
-        {mode === "vap" ? (
-          <div className="flex flex-col gap-2">
+            {/* Durée liée */}
             <div className="flex items-center justify-between">
-              <span className="text-gray-400 text-sm">VAP cible</span>
-              <span className="font-semibold text-gray-100 text-sm">
-                {formatPace(sliderPace)}
-                <span className="font-normal text-gray-500"> /km</span>
-              </span>
-            </div>
-            <Slider
-              className="w-full"
-              max={SLIDER_MAX}
-              min={SLIDER_MIN}
-              onValueChange={(vals) => setSliderPace(vals[0])}
-              step={5}
-              value={[sliderPace]}
-            />
-            <div className="flex justify-between text-[11px] text-gray-600">
-              <span>{formatPace(SLIDER_MIN)}/km</span>
-              <span>{formatPace(SLIDER_MAX)}/km</span>
-            </div>
-          </div>
-        ) : (
-          <div className="flex items-center gap-3">
-            <label
-              className="shrink-0 text-gray-400 text-sm"
-              htmlFor="duration-input"
-            >
-              Durée estimée
-            </label>
-            <Input
-              className={[
-                "h-auto w-36 border bg-gray-800 py-1.5 text-gray-100 text-sm",
-                durationInvalid
-                  ? "border-red-700 focus-visible:ring-red-500"
-                  : "border-gray-700",
-              ].join(" ")}
-              id="duration-input"
-              maxLength={10}
-              onChange={(e) => setDurationInput(e.target.value)}
-              placeholder="ex: 4:30 ou 4h30"
-              type="text"
-              value={durationInput}
-            />
-            {parsedDuration && gapPace && (
-              <span className="text-gray-500 text-sm">
-                → VAP{" "}
-                <span className="font-medium text-gray-300">
-                  {formatPace(gapPace)}/km
-                </span>
-              </span>
-            )}
-          </div>
-        )}
-
-        {gapPace && (
-          <div className="flex gap-6">
-            <div>
-              <p className="mb-0.5 text-[11px] text-gray-500 uppercase tracking-wide">
-                Temps total estimé
-              </p>
-              <p className="font-semibold text-gray-100 text-lg">
-                {formatTime(totalTime || 0)}
-              </p>
-            </div>
-            <div>
-              <p className="mb-0.5 text-[11px] text-gray-500 uppercase tracking-wide">
-                Ravitaillements
-              </p>
-              <p className="font-semibold text-gray-100 text-lg">
-                {aidStations.length}
-              </p>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Objectifs nutrition */}
-      <div className="flex flex-col gap-3">
-        <h3 className="font-medium text-gray-400 text-sm">
-          Objectifs nutrition
-        </h3>
-        <div className="flex flex-wrap items-center gap-0 divide-x divide-gray-700">
-          {[
-            {
-              label: "Glucides",
-              value: carbsPerHour,
-              onChange: setCarbsPerHour,
-              unit: "g/h",
-              min: 30,
-              max: 120,
-              step: 5,
-            },
-            {
-              label: "Eau",
-              value: waterPerHour,
-              onChange: setWaterPerHour,
-              unit: "mL/h",
-              min: 100,
-              max: 1500,
-              step: 50,
-            },
-            {
-              label: "Sodium",
-              value: sodiumPerHour,
-              onChange: setSodiumPerHour,
-              unit: "mg/h",
-              min: 100,
-              max: 1500,
-              step: 50,
-            },
-          ].map(({ label, value, onChange, unit, min, max, step }) => (
-            <div
-              className="flex items-center gap-1.5 px-3 first:pl-0 last:pr-0"
-              key={label}
-            >
-              <span className="text-gray-400 text-sm">{label}</span>
-              <NumberStepper
-                inputClassName="w-16"
-                max={max}
-                min={min}
-                onChange={onChange}
-                step={step}
-                unit={unit}
-                value={value}
+              <span className="text-gray-500 text-xs">Durée totale</span>
+              <Input
+                className={[
+                  "h-auto w-24 border bg-gray-800 py-1 text-right font-bold text-gray-100 text-lg",
+                  durationInvalid
+                    ? "border-red-700 focus-visible:ring-red-500"
+                    : "border-gray-700",
+                ].join(" ")}
+                id="duration-input"
+                maxLength={10}
+                onBlur={() => { durationFocused.current = false; }}
+                onChange={(e) => {
+                  setDurationInput(e.target.value);
+                  const parsed = parseDuration(e.target.value);
+                  if (parsed) {
+                    setSliderPace(Math.round(Math.max(SLIDER_MIN, Math.min(SLIDER_MAX, gapPaceFromTime(sections, parsed)))));
+                  }
+                }}
+                onFocus={() => { durationFocused.current = true; }}
+                placeholder="—"
+                type="text"
+                value={durationInput}
               />
             </div>
-          ))}
-          <div className="flex items-center gap-1.5 px-3">
-            <span className="text-gray-400 text-sm">Poids</span>
-            <NumberStepper
-              inputClassName="w-14"
-              max={150}
-              min={30}
-              onChange={setBodyWeightKg}
-              step={1}
-              unit="kg"
-              value={bodyWeightKg}
-            />
           </div>
         </div>
-        <FoodLibrary
-          armedFoodId={armedFoodId}
-          foodLibrary={foodLibrary}
-          nutritionPlacements={nutritionPlacements}
-          onArmFood={(id) =>
-            setArmedFoodId((prev) => (prev === id ? null : id))
-          }
-          setFoodLibrary={setFoodLibrary}
-          setNutritionPlacements={setNutritionPlacements}
-        />
-      </div>
 
-      {/* Bande favoris + indicateur armé */}
-      {(() => {
-        const favorites = foodLibrary.filter((f) => f.favorite);
-        if (favorites.length === 0 && !armedFoodId) {
-          return null;
-        }
-        return (
-          <div className="flex flex-col gap-2">
-            {armedFoodId && (
-              <div className="rounded-lg border border-teal-700/40 bg-teal-900/20 px-3 py-1.5 text-[11px] text-teal-400">
-                Cliquer sur le profil pour placer · Échap pour annuler
+        {/* Séparateur */}
+        <div className="self-stretch w-px bg-gray-800" />
+
+        {/* Objectifs nutrition */}
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center gap-3">
+            <span className="text-gray-600 text-xs uppercase tracking-wide">Nutrition</span>
+            {/* TODO: Mode avancé caché — en cours de développement */}
+            <div className="flex rounded-lg border border-gray-700 bg-gray-800/60 p-0.5">
+              <button
+                className="rounded-md px-2.5 py-0.5 text-xs transition-colors bg-gray-600 font-medium text-gray-100"
+                type="button"
+              >
+                Normal
+              </button>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-0 divide-x divide-gray-800">
+            {[
+              { label: "Glucides", value: carbsPerHour, onChange: setCarbsPerHour, unit: "g/h",  min: 30,  max: 120,  step: 5  },
+              { label: "Eau",      value: waterPerHour,  onChange: setWaterPerHour,  unit: "mL/h", min: 100, max: 1500, step: 50 },
+              { label: "Sodium",   value: sodiumPerHour, onChange: setSodiumPerHour, unit: "mg/h", min: 100, max: 1500, step: 50 },
+            ].map(({ label, value, onChange, unit, min, max, step }) => (
+              <div className="flex items-center gap-1.5 px-3 first:pl-0 last:pr-0" key={label}>
+                <span className="text-gray-400 text-sm">{label}</span>
+                <NumberStepper inputClassName="w-16" max={max} min={min} onChange={onChange} step={step} unit={unit} value={value} />
               </div>
-            )}
-            {favorites.length > 0 && (
-              <div className="flex flex-col gap-2">
-                <div className="flex items-center gap-1.5">
-                  <Star className="fill-amber-400 text-amber-400" size={11} />
-                  <span className="font-medium text-[11px] text-gray-500 uppercase tracking-wide">
-                    Favoris
-                  </span>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {favorites.map((item) => {
-                    const isArmed = armedFoodId === item.id;
-                    return (
-                      <button
-                        className="flex cursor-grab flex-col items-center gap-1 active:cursor-grabbing"
-                        draggable
-                        key={item.id}
-                        onClick={() =>
-                          setArmedFoodId((prev) =>
-                            prev === item.id ? null : item.id
-                          )
-                        }
-                        onDragStart={(e) => {
-                          e.dataTransfer.setData("foodItemId", item.id);
-                          e.dataTransfer.effectAllowed = "copy";
-                        }}
-                        title={item.name}
-                        type="button"
-                      >
-                        <div
-                          className={[
-                            "flex h-[56px] w-[56px] items-center justify-center rounded-xl transition-all duration-150",
-                            isArmed
-                              ? "border-2 border-teal-500 bg-teal-900/50 shadow-md"
-                              : "border-2 border-gray-700 bg-gray-800/80 hover:scale-105 hover:border-gray-500",
-                          ].join(" ")}
-                        >
-                          <img
-                            alt={item.name}
-                            className="h-9 w-9 object-contain drop-shadow-sm"
-                            height={36}
-                            src={foodIconSrc(item)}
-                            width={36}
-                          />
-                        </div>
-                        <span className="line-clamp-1 w-[60px] break-words text-center text-[10px] text-gray-500 leading-tight">
-                          {item.name}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
+            ))}
+            {nutritionMode === "advanced" && (
+              <div className="flex items-center gap-1.5 px-3">
+                <span className="text-gray-400 text-sm">Poids</span>
+                <NumberStepper inputClassName="w-14" max={150} min={30} onChange={setBodyWeightKg} step={1} unit="kg" value={bodyWeightKg} />
               </div>
             )}
           </div>
-        );
-      })()}
+        </div>
+
+      </div>
+
+      {/* Séparateur haut */}
+      <div className="border-t border-gray-800" />
+      <p className="font-medium text-[10px] text-gray-600 uppercase tracking-widest">Planification</p>
+
+      {/* Zone imprimable : graphique + bilan */}
+      <div ref={printRef}>
+
+      {/* Bouton ajout ravito — au-dessus de l'encadré, aligné à droite */}
+      <div className="mb-1 flex justify-end" data-print-hide="">
+        {showAddStation ? (
+          <form
+            className="flex items-center gap-1.5"
+            onSubmit={(e) => {
+              e.preventDefault();
+              confirmAddStation();
+            }}
+          >
+            <div className="flex h-7 items-center overflow-hidden rounded-lg border border-gray-600 bg-gray-800">
+              <input
+                autoFocus
+                className="w-28 border-gray-700 border-r bg-transparent px-2.5 text-gray-100 text-xs placeholder-gray-600 outline-none"
+                onChange={(e) => setAddStationName(e.target.value)}
+                placeholder="Nom (optionnel)"
+                type="text"
+                value={addStationName}
+              />
+              <input
+                className="w-14 bg-transparent px-2.5 text-gray-100 text-xs placeholder-gray-600 outline-none"
+                onChange={(e) => setAddStationKm(e.target.value)}
+                placeholder="km"
+                type="text"
+                value={addStationKm}
+              />
+              <span className="pr-2 text-gray-500 text-[11px]">
+                / {(totalDistance / 1000).toFixed(1)} km
+              </span>
+            </div>
+            <button
+              className="h-7 rounded-lg bg-teal-700 px-2.5 font-medium text-white text-xs transition-colors hover:bg-teal-600"
+              type="submit"
+            >
+              Ajouter
+            </button>
+            <button
+              className="h-7 px-1.5 text-gray-500 transition-colors hover:text-gray-300"
+              onClick={() => {
+                setShowAddStation(false);
+                setAddStationKm("");
+              }}
+              type="button"
+            >
+              <X size={13} />
+            </button>
+          </form>
+        ) : (
+          <button
+            className="flex h-7 items-center gap-1 rounded-lg border border-gray-700 bg-gray-800/80 px-2.5 font-medium text-gray-400 text-xs transition-colors hover:bg-gray-700 hover:text-gray-200"
+            onClick={() => setShowAddStation(true)}
+            type="button"
+          >
+            <span className="text-sm leading-none">+</span> Ravito
+          </button>
+        )}
+      </div>
 
       {/* Profil altimétrique */}
       {/* biome-ignore lint/a11y/noNoninteractiveElementInteractions: drop-zone requires drag event handlers; no semantic HTML equivalent */}
       <div
         aria-label="Zone de profil altimétrique"
         className="relative"
-        onDragLeave={(e) => {
-          if (!e.currentTarget.contains(e.relatedTarget as Node)) {
-            setDragOverChart(null);
-          }
-        }}
-        onDragOver={(e) => {
-          e.preventDefault();
-          e.dataTransfer.dropEffect = "copy";
-          const svgX = clientXToSvgX(e.clientX);
-          const distM = Math.max(0, Math.min(totalDistance, svgXToDist(svgX)));
-          setDragOverChart({ svgX, distM });
-        }}
-        onDrop={(e) => {
-          e.preventDefault();
-          const foodItemId = e.dataTransfer.getData("foodItemId");
-          setDragOverChart(null);
-          if (foodItemId) {
-            const svgX = clientXToSvgX(e.clientX);
-            const distM = Math.max(
-              0,
-              Math.min(totalDistance, svgXToDist(svgX))
-            );
-            setNutritionPlacements((prev) => [
-              ...prev,
-              {
-                id: crypto.randomUUID(),
-                foodItemId,
-                distanceFromStart: distM,
-              },
-            ]);
-          }
-        }}
+        data-print-section="chart"
+        {...(!printOptions.chart ? { "data-print-hide": "" } : {})}
+        onDragLeave={
+          nutritionMode === "advanced"
+            ? (e) => {
+                if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+                  setDragOverChart(null);
+                }
+              }
+            : undefined
+        }
+        onDragOver={
+          nutritionMode === "advanced"
+            ? (e) => {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = "copy";
+                const svgX = clientXToSvgX(e.clientX);
+                const distM = Math.max(
+                  0,
+                  Math.min(totalDistance, svgXToDist(svgX))
+                );
+                setDragOverChart({ svgX, distM });
+              }
+            : undefined
+        }
+        onDrop={
+          nutritionMode === "advanced"
+            ? (e) => {
+                e.preventDefault();
+                const foodItemId = e.dataTransfer.getData("foodItemId");
+                setDragOverChart(null);
+                if (foodItemId) {
+                  const svgX = clientXToSvgX(e.clientX);
+                  const distM = Math.max(
+                    0,
+                    Math.min(totalDistance, svgXToDist(svgX))
+                  );
+                  setNutritionPlacements((prev) => [
+                    ...prev,
+                    {
+                      id: crypto.randomUUID(),
+                      foodItemId,
+                      distanceFromStart: distM,
+                    },
+                  ]);
+                }
+              }
+            : undefined
+        }
         ref={svgContainerRef}
         role="application"
       >
@@ -1327,12 +1277,7 @@ export function AidStationPlanner({
               <rect height={CHART_H} width={CHART_W} x={PAD_LEFT} y={PAD_TOP} />
             </clipPath>
             <clipPath id="aid-food-lane">
-              <rect
-                height={FOOD_LANE_H}
-                width={CHART_W}
-                x={PAD_LEFT}
-                y={FOOD_LANE_Y}
-              />
+              <rect height={FOOD_LANE_H} width={CHART_W} x={PAD_LEFT} y={FOOD_LANE_Y} />
             </clipPath>
           </defs>
 
@@ -1341,48 +1286,34 @@ export function AidStationPlanner({
             const x1 = toX(leg.fromDist);
             const x2 = toX(leg.toDist);
             const w = x2 - x1;
-            const isHovered = hoveredLegIdx === li;
-            const isSelected = selectedLegIdx === li;
             return (
               // biome-ignore lint/a11y/noStaticElementInteractions: SVG <g> has no semantic interactive equivalent
-              <g
-                key={`leg-${leg.fromDist}-${leg.toDist}`}
-                onClick={() => {
-                  setSelectedLegIdx(li === selectedLegIdx ? null : li);
-                  setConfirmDeleteStationId(null);
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
+              <g key={`leg-${leg.fromDist}-${leg.toDist}`}>
+                {/* Zone de clic pleine hauteur — highlight uniquement si sélectionné */}
+                {/* biome-ignore lint/a11y/noStaticElementInteractions: clic sur zone SVG */}
+                <rect
+                  fill="#ffffff"
+                  fillOpacity={0}
+                  height={VIEW_H_PROFILE - 3}
+                  onClick={() => {
                     setSelectedLegIdx(li === selectedLegIdx ? null : li);
                     setConfirmDeleteStationId(null);
-                  }
-                }}
-                onMouseEnter={() => setHoveredLegIdx(li)}
-                onMouseLeave={() => setHoveredLegIdx(null)}
-                style={{ cursor: "pointer" }}
-                tabIndex={0}
-              >
-                {/* Alternance fond par tronçon */}
-                <rect
-                  fill={li % 2 === 0 ? "#ffffff" : "#b0b0b0"}
-                  fillOpacity={isHovered || isSelected ? 0.07 : 0.025}
-                  height={CHART_H + FOOD_LANE_H + STATS_LANE_H + 40}
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      setSelectedLegIdx(li === selectedLegIdx ? null : li);
+                      setConfirmDeleteStationId(null);
+                    }
+                  }}
+                  style={{ cursor: "pointer" }}
+                  tabIndex={0}
                   width={w}
                   x={x1}
-                  y={PAD_TOP}
+                  y={1}
                 />
                 {/* Stats du tronçon dans la stats lane */}
                 {w > 40 && (
                   <g style={{ pointerEvents: "none" }}>
-                    {/* Séparateur */}
-                    <line
-                      stroke="#2a2a28"
-                      strokeWidth={1}
-                      x1={x1}
-                      x2={x2}
-                      y1={STATS_LANE_Y}
-                      y2={STATS_LANE_Y}
-                    />
                     {/* Durée (toujours si assez de place) */}
                     {w > 40 && (
                       <text
@@ -1414,34 +1345,149 @@ export function AidStationPlanner({
                         m
                       </text>
                     )}
+                    {/* Icônes aliments du tronçon */}
+                    {w > 72 &&
+                      (() => {
+                        const key = legKey(li);
+                        const SLOT_W = 28;
+                        const ICON_SZ = 22;
+                        const assignments = (legNutritionPlan[key] ?? []).filter((a) =>
+                          foodLibrary.some((f) => f.id === a.foodItemId)
+                        );
+                        if (assignments.length === 0) return null;
+                        const maxSlots = Math.floor((w - 8) / SLOT_W);
+                        const visibleA = assignments.slice(0, maxSlots - (assignments.length > maxSlots ? 1 : 0));
+                        const overflow = assignments.length - visibleA.length;
+                        const totalW = visibleA.length * SLOT_W + (overflow > 0 ? SLOT_W : 0);
+                        const startX = x1 + w / 2 - totalW / 2;
+                        const iconTop = STATS_LANE_Y + 29;
+                        return (
+                          <g style={{ pointerEvents: "none" }}>
+                            {visibleA.map((a, ai) => {
+                              const item = foodLibrary.find((f) => f.id === a.foodItemId);
+                              if (!item) return null;
+                              const ix = startX + ai * SLOT_W + (SLOT_W - ICON_SZ) / 2;
+                              return (
+                                <g key={`${key}-${a.foodItemId}`}>
+                                  <image height={ICON_SZ} href={foodIconSrc(item)} width={ICON_SZ} x={ix} y={iconTop} />
+                                  {a.quantity > 1 && (
+                                    <>
+                                      <circle cx={ix + ICON_SZ - 0.5} cy={iconTop + 0.5} fill="var(--chart-surface)" r={4} stroke="#4A7FA0" strokeWidth={0.8} />
+                                      <text fill="var(--chart-foreground)" fontSize={5} fontWeight="700" textAnchor="middle" x={ix + ICON_SZ - 0.5} y={iconTop + 3}>{a.quantity}</text>
+                                    </>
+                                  )}
+                                </g>
+                              );
+                            })}
+                            {overflow > 0 && (
+                              <text fill="#5a5a56" fontSize={7} fontWeight="600" textAnchor="middle" x={startX + visibleA.length * SLOT_W + SLOT_W / 2} y={iconTop + ICON_SZ - 1}>
+                                +{overflow}
+                              </text>
+                            )}
+                          </g>
+                        );
+                      })()}
                   </g>
                 )}
+                {/* Note du tronçon sur le graphique */}
+                {(() => {
+                  const note = legNotes[legKey(li)];
+                  if (!note || w < 40) return null;
+                  const maxChars = Math.floor((w - 12) / 5.5);
+                  const display = note.length > maxChars ? `${note.slice(0, maxChars - 1)}…` : note;
+                  return (
+                    <text
+                      fill="#6b7280"
+                      fontSize={7.5}
+                      fontStyle="italic"
+                      style={{ pointerEvents: "none" }}
+                      textAnchor="middle"
+                      x={x1 + w / 2}
+                      y={STATS_LANE_Y + STATS_LANE_H - 4}
+                    >
+                      {display}
+                    </text>
+                  );
+                })()}
+                {/* Indicateur nutrition insuffisante */}
+                {nutritionMode === "normal" && leg.time > 0 && w > 14 &&
+                  (() => {
+                    const key = legKey(li);
+                    const assignments = legNutritionPlan[key] ?? [];
+                    const totals = computeLegNutrition(assignments, foodLibrary);
+                    const hours = leg.time / 3600;
+                    const issues: string[] = [];
+                    if (carbsPerHour > 0 && totals.carbs < Math.round(hours * carbsPerHour))
+                      issues.push(`Glucides : ${totals.carbs}g / ${Math.round(hours * carbsPerHour)}g`);
+                    if (waterPerHour > 0 && totals.water < Math.round(hours * waterPerHour))
+                      issues.push(`Eau : ${totals.water} mL / ${Math.round(hours * waterPerHour)} mL`);
+                    if (sodiumPerHour > 0 && totals.sodium < Math.round(hours * sodiumPerHour))
+                      issues.push(`Sodium : ${totals.sodium} mg / ${Math.round(hours * sodiumPerHour)} mg`);
+                    if (issues.length === 0) return null;
+                    const iconSz = 9;
+                    const iconX = x1 + 5;
+                    const iconY = STATS_LANE_Y + STATS_LANE_H - 5 - iconSz;
+                    const scale = iconSz / 24;
+                    const isHov = hoveredWarningLegIdx === li;
+                    const tooltipW = 158;
+                    const tooltipH = issues.length * 14 + 8;
+                    const tipAnchorX = iconX + iconSz / 2;
+                    const tooltipX = tipAnchorX + 6 + tooltipW > PAD_LEFT + CHART_W
+                      ? tipAnchorX - tooltipW - 6
+                      : tipAnchorX + 6;
+                    const tooltipY = iconY - tooltipH - 4;
+                    return (
+                      <g>
+                        {/* biome-ignore lint/a11y/noStaticElementInteractions: SVG element */}
+                        <g
+                          fill="none"
+                          onMouseEnter={() => setHoveredWarningLegIdx(li)}
+                          onMouseLeave={() => setHoveredWarningLegIdx(null)}
+                          stroke="#f97316"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={0.8 / scale}
+                          style={{ cursor: "default" }}
+                          transform={`translate(${iconX}, ${iconY}) scale(${scale})`}
+                        >
+                          <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3" />
+                          <path d="M12 9v4" />
+                          <path d="M12 17h.01" />
+                        </g>
+                        {isHov && (
+                          <g style={{ pointerEvents: "none" }}>
+                            <rect
+                              fill="#1c1c1a"
+                              height={tooltipH}
+                              rx={4}
+                              stroke="#374151"
+                              strokeWidth={1}
+                              width={tooltipW}
+                              x={tooltipX}
+                              y={tooltipY}
+                            />
+                            {issues.map((issue, ii) => (
+                              <text
+                                fill="#d1d5db"
+                                fontSize={9}
+                                key={issue}
+                                x={tooltipX + 8}
+                                y={tooltipY + 13 + ii * 14}
+                              >
+                                {issue}
+                              </text>
+                            ))}
+                          </g>
+                        )}
+                      </g>
+                    );
+                  })()}
               </g>
             );
           })}
 
           <g clipPath="url(#aid-chart-area)">
-            {/* Zones colorées par tronçon (hover) */}
-            {legs.map((leg, li) => {
-              if (hoveredLegIdx !== li) {
-                return null;
-              }
-              const x1 = toX(leg.fromDist);
-              const x2 = toX(leg.toDist);
-              return (
-                <rect
-                  fill="#ffffff"
-                  fillOpacity={0.06}
-                  height={CHART_H}
-                  key={`hover-${leg.fromDist}-${leg.toDist}`}
-                  width={x2 - x1}
-                  x={x1}
-                  y={PAD_TOP}
-                />
-              );
-            })}
 
-            <path d={fillPath} fill="#374151" fillOpacity={0.4} />
             {coloredLines}
 
             {/* Lignes verticales ravitaillements */}
@@ -1496,7 +1542,7 @@ export function AidStationPlanner({
                   fill={fill}
                   height={rectH}
                   rx={4}
-                  stroke="#161614"
+                  stroke="var(--chart-surface)"
                   strokeWidth={1.5}
                   width={rectW}
                   x={x - rectW / 2}
@@ -1517,33 +1563,16 @@ export function AidStationPlanner({
             );
           })}
 
-          {/* Labels X (distance) */}
-          {xTicks.map((dist) => (
-            <text
-              fill="#6E6C66"
-              fontSize={10}
-              key={dist}
-              textAnchor="middle"
-              x={toX(dist)}
-              y={X_LABEL_Y + 11}
-            >
-              {(dist / 1000) % 1 === 0
-                ? `${dist / 1000} km`
-                : `${(dist / 1000).toFixed(1)} km`}
-            </text>
-          ))}
-
-          {/* Food lane */}
-          <line
+          {/* Food lane (mode avancé uniquement) */}
+          {nutritionMode === "advanced" && <line
             stroke="#2a2a28"
             strokeWidth={1}
             x1={PAD_LEFT}
             x2={PAD_LEFT + CHART_W}
             y1={FOOD_LANE_Y - 1}
             y2={FOOD_LANE_Y - 1}
-          />
-          {(() => {
-            // Grouper les placements par proximité x (<= 16 SVG units)
+          />}
+          {nutritionMode === "advanced" && (() => {
             const sorted = [...nutritionPlacements].sort(
               (a, b) => a.distanceFromStart - b.distanceFromStart
             );
@@ -1557,48 +1586,27 @@ export function AidStationPlanner({
                 groups.push([p]);
               }
             }
-
             return groups.map((group, _gi) => {
               const centerX = toX(group[0].distanceFromStart);
               const MAX_VISIBLE = 3;
               const visible = group.slice(0, MAX_VISIBLE);
               const overflow = group.length - MAX_VISIBLE;
-
               return (
                 <g clipPath="url(#aid-food-lane)" key={group[0].id}>
                   {visible.map((p, si) => {
                     const item = foodLibrary.find((f) => f.id === p.foodItemId);
-                    if (!item) {
-                      return null;
-                    }
-                    const iconY =
-                      FOOD_LANE_Y +
-                      (FOOD_LANE_H - FOOD_ICON_SIZE) / 2 -
-                      si * (FOOD_ICON_SIZE * 0.7);
+                    if (!item) return null;
+                    const iconY = FOOD_LANE_Y + (FOOD_LANE_H - FOOD_ICON_SIZE) / 2 - si * (FOOD_ICON_SIZE * 0.7);
                     const isDragging = dragFoodId === p.id;
                     const isSelected = selectedFoodPlacementId === p.id;
                     return (
                       <g key={p.id}>
-                        {/* Zone de hover + clic élargie */}
                         {/* biome-ignore lint/a11y/noStaticElementInteractions: SVG <rect> has no semantic interactive equivalent */}
                         <rect
                           fill="transparent"
                           height={FOOD_ICON_SIZE + 8}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            if (!foodDragMovedRef.current) {
-                              setSelectedFoodPlacementId((prev) =>
-                                prev === p.id ? null : p.id
-                              );
-                            }
-                          }}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter" || e.key === " ") {
-                              setSelectedFoodPlacementId((prev) =>
-                                prev === p.id ? null : p.id
-                              );
-                            }
-                          }}
+                          onClick={(e) => { e.stopPropagation(); if (!foodDragMovedRef.current) setSelectedFoodPlacementId((prev) => prev === p.id ? null : p.id); }}
+                          onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") setSelectedFoodPlacementId((prev) => prev === p.id ? null : p.id); }}
                           onMouseDown={(e) => handleFoodIconMouseDown(e, p.id)}
                           onMouseEnter={() => setHoveredFoodId(p.id)}
                           onMouseLeave={() => setHoveredFoodId(null)}
@@ -1608,81 +1616,35 @@ export function AidStationPlanner({
                           x={centerX - FOOD_ICON_SIZE / 2 - 4}
                           y={iconY - 4}
                         />
-                        <image
-                          height={FOOD_ICON_SIZE}
-                          href={foodIconSrc(item)}
-                          style={{
-                            pointerEvents: "none",
-                            opacity: isDragging ? 0.6 : 1,
-                          }}
-                          width={FOOD_ICON_SIZE}
-                          x={centerX - FOOD_ICON_SIZE / 2}
-                          y={iconY}
-                        />
-                        {/* Halo sélection */}
+                        <image height={FOOD_ICON_SIZE} href={foodIconSrc(item)} style={{ pointerEvents: "none", opacity: isDragging ? 0.6 : 1 }} width={FOOD_ICON_SIZE} x={centerX - FOOD_ICON_SIZE / 2} y={iconY} />
                         {isSelected && (
-                          <rect
-                            fill="none"
-                            height={FOOD_ICON_SIZE + 6}
-                            rx={4}
-                            stroke="#60a5fa"
-                            strokeWidth={1.5}
-                            style={{ pointerEvents: "none" }}
-                            width={FOOD_ICON_SIZE + 6}
-                            x={centerX - FOOD_ICON_SIZE / 2 - 3}
-                            y={iconY - 3}
-                          />
+                          <rect fill="none" height={FOOD_ICON_SIZE + 6} rx={4} stroke="#60a5fa" strokeWidth={1.5} style={{ pointerEvents: "none" }} width={FOOD_ICON_SIZE + 6} x={centerX - FOOD_ICON_SIZE / 2 - 3} y={iconY - 3} />
                         )}
                       </g>
                     );
                   })}
                   {overflow > 0 && (
-                    <text
-                      fill="#6E6C66"
-                      fontSize={8}
-                      textAnchor="middle"
-                      x={centerX}
-                      y={FOOD_LANE_Y + FOOD_LANE_H - 4}
-                    >
-                      +{overflow}
-                    </text>
+                    <text fill="#6E6C66" fontSize={8} textAnchor="middle" x={centerX} y={FOOD_LANE_Y + FOOD_LANE_H - 4}>+{overflow}</text>
                   )}
                 </g>
               );
             });
           })()}
 
-          {/* Tooltip nom aliment au survol — rendu hors clipPath */}
-          {hoveredFoodId &&
-            !dragFoodId &&
-            !selectedFoodPlacementId &&
-            (() => {
-              const p = nutritionPlacements.find(
-                (pl) => pl.id === hoveredFoodId
-              );
-              if (!p) {
-                return null;
-              }
-              const item = foodLibrary.find((f) => f.id === p.foodItemId);
-              if (!item) {
-                return null;
-              }
-              const cx = toX(p.distanceFromStart);
-              return (
-                <text
-                  fill="#6b7280"
-                  fontSize={8}
-                  style={{ pointerEvents: "none" }}
-                  textAnchor="middle"
-                  x={cx}
-                  y={FOOD_LANE_Y + FOOD_LANE_H - 3}
-                >
-                  {item.name}
-                </text>
-              );
-            })()}
+          {/* Tooltip nom aliment au survol (mode avancé) */}
+          {nutritionMode === "advanced" && hoveredFoodId && !dragFoodId && !selectedFoodPlacementId && (() => {
+            const p = nutritionPlacements.find((pl) => pl.id === hoveredFoodId);
+            if (!p) return null;
+            const item = foodLibrary.find((f) => f.id === p.foodItemId);
+            if (!item) return null;
+            return (
+              <text fill="#6b7280" fontSize={8} style={{ pointerEvents: "none" }} textAnchor="middle" x={toX(p.distanceFromStart)} y={FOOD_LANE_Y + FOOD_LANE_H - 3}>
+                {item.name}
+              </text>
+            );
+          })()}
 
-          {/* Lignes verticales ravitos dans la food lane */}
+          {/* Lignes verticales ravitos : food lane (ou chart) → stats lane → label km */}
           {sortedStations.map((s) => (
             <line
               key={`fl-${s.id}`}
@@ -1692,31 +1654,93 @@ export function AidStationPlanner({
               strokeWidth={1}
               x1={toX(s.distanceFromStart)}
               x2={toX(s.distanceFromStart)}
-              y1={FOOD_LANE_Y}
-              y2={FOOD_LANE_Y + FOOD_LANE_H}
+              y1={nutritionMode === "advanced" ? FOOD_LANE_Y : STATS_LANE_Y}
+              y2={X_LABEL_Y + 14}
             />
           ))}
 
-          {/* Temps cumulés aux limites de tronçon */}
+          {/* Labels km uniquement sous les ravitos — en bulles */}
+          {sortedStations.map((s) => {
+            const x = toX(s.distanceFromStart);
+            const kmLabel =
+              (s.distanceFromStart / 1000) % 1 === 0
+                ? `${s.distanceFromStart / 1000} km`
+                : `${(s.distanceFromStart / 1000).toFixed(1)} km`;
+            const bW = kmLabel.length * 5.2 + 10;
+            const bH = 13;
+            const bY = X_LABEL_Y + 1;
+            return (
+              <g key={`km-${s.id}`} style={{ pointerEvents: "none" }}>
+                <rect
+                  fill="#4A7FA0"
+                  height={bH}
+                  rx={3}
+                  stroke="var(--chart-surface)"
+                  strokeWidth={1}
+                  width={bW}
+                  x={x - bW / 2}
+                  y={bY}
+                />
+                <text
+                  fill="#fff"
+                  fontSize={8}
+                  fontWeight="500"
+                  style={{ pointerEvents: "none" }}
+                  textAnchor="middle"
+                  x={x}
+                  y={bY + bH - 4}
+                >
+                  {kmLabel}
+                </text>
+              </g>
+            );
+          })}
+
+          {/* Temps cumulés aux limites de tronçon — en bulles (sauf début et fin) */}
           {effectiveLegs.length > 0 &&
-            [
-              { dist: 0, label: "0:00" },
-              ...effectiveLegs.map((leg) => ({
-                dist: leg.toDist,
-                label: formatTime(leg.cumulativeTime),
-              })),
-            ].map(({ dist, label }, i) => (
-              <text
-                fill="#6E6C66"
-                fontSize={10}
-                key={dist}
-                textAnchor={i === 0 ? "start" : "middle"}
-                x={toX(dist)}
-                y={FOOD_LANE_Y + FOOD_LANE_H + 6}
-              >
-                {label}
-              </text>
-            ))}
+            (() => {
+              const items = [
+                { dist: 0, label: "0:00" },
+                ...effectiveLegs.map((leg) => ({
+                  dist: leg.toDist,
+                  label: formatTime(leg.cumulativeTime),
+                })),
+              ];
+              return items.map(({ dist, label }, i) => {
+                const isFirst = i === 0;
+                const isLast = i === items.length - 1;
+                if (isFirst || isLast) return null;
+                const x = toX(dist);
+                const bW = label.length * 5.2 + 10;
+                const bH = 13;
+                const bY = STATS_LANE_Y - bH - 2;
+                return (
+                  <g key={dist} style={{ pointerEvents: "none" }}>
+                    <rect
+                      fill="#D0CEC8"
+                      height={bH}
+                      rx={3}
+                      stroke="var(--chart-surface)"
+                      strokeWidth={1}
+                      width={bW}
+                      x={x - bW / 2}
+                      y={bY}
+                    />
+                    <text
+                      fill="#3a3a36"
+                      fontSize={8}
+                      fontWeight="500"
+                      style={{ pointerEvents: "none" }}
+                      textAnchor="middle"
+                      x={x}
+                      y={bY + bH - 4}
+                    >
+                      {label}
+                    </text>
+                  </g>
+                );
+              });
+            })()}
 
           {/* Hover */}
           {hover && !dragId && (
@@ -1736,11 +1760,11 @@ export function AidStationPlanner({
                 cy={toY(hover.elevation)}
                 fill={slopeHexFn(hover.slope)}
                 r={3.5}
-                stroke="#161614"
+                stroke="var(--chart-surface)"
                 strokeWidth={1.5}
               />
               <rect
-                fill="#161614"
+                fill="var(--chart-surface)"
                 height={44}
                 rx={5}
                 stroke="#3D3D37"
@@ -1821,7 +1845,7 @@ export function AidStationPlanner({
                   tabIndex={-1}
                 >
                   <rect
-                    fill="#161614"
+                    fill="var(--chart-surface)"
                     height={H}
                     rx={4}
                     stroke="#3D3D37"
@@ -1832,7 +1856,7 @@ export function AidStationPlanner({
                   />
                   {/* Triangle pointant vers l'icône */}
                   <polygon
-                    fill="#161614"
+                    fill="var(--chart-surface)"
                     points={`${arrowX - 5},${popupY + H} ${arrowX + 5},${popupY + H} ${arrowX},${FOOD_LANE_Y - 3}`}
                   />
                   <line
@@ -1953,7 +1977,7 @@ export function AidStationPlanner({
                 x1={dragOverChart.svgX}
                 x2={dragOverChart.svgX}
                 y1={PAD_TOP}
-                y2={FOOD_LANE_Y + FOOD_LANE_H}
+                y2={nutritionMode === "advanced" ? FOOD_LANE_Y + FOOD_LANE_H : STATS_LANE_Y + STATS_LANE_H}
               />
               {(() => {
                 const km = (dragOverChart.distM / 1000).toFixed(2);
@@ -2001,11 +2025,175 @@ export function AidStationPlanner({
               })()}
             </g>
           )}
+
+          {/* Encadré — entoure ravitos (haut) + profil + stats + km (bas) */}
+          <rect
+            fill="none"
+            height={VIEW_H_PROFILE - 1}
+            rx={4}
+            stroke="#3d3d37"
+            strokeWidth={1}
+            style={{ pointerEvents: "none" }}
+            width={VIEW_W}
+            x={0}
+            y={0}
+          />
         </svg>
+
       </div>
 
-      {/* Timelines nutrition avec switch */}
-      {totalTime > 0 &&
+      {/* Bibliothèque + favoris + indicateur armé — sous le graphique */}
+      <div className="mt-1 flex items-center justify-between gap-3" data-print-hide="">
+        {/* Favoris (mode avancé) */}
+        {nutritionMode === "advanced" && (() => {
+          const favorites = foodLibrary.filter((f) => f.favorite);
+          if (favorites.length === 0) return <div />;
+          return (
+            <div className="flex flex-wrap items-center gap-1.5">
+              {favorites.map((item) => {
+                const isArmed = armedFoodId === item.id;
+                return (
+                  <button
+                    className="flex cursor-grab flex-col items-center gap-0.5 active:cursor-grabbing"
+                    draggable
+                    key={item.id}
+                    onClick={() => setArmedFoodId((prev) => prev === item.id ? null : item.id)}
+                    onDragStart={(e) => { e.dataTransfer.setData("foodItemId", item.id); e.dataTransfer.effectAllowed = "copy"; }}
+                    title={item.name}
+                    type="button"
+                  >
+                    <div className={["flex h-8 w-8 items-center justify-center rounded-lg transition-all duration-150",
+                      isArmed ? "border-2 border-teal-500 bg-teal-900/50" : "border border-gray-700 bg-gray-800/80 hover:border-gray-500",
+                    ].join(" ")}>
+                      <img alt={item.name} className="h-5 w-5 object-contain" height={20} src={foodIconSrc(item)} width={20} />
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          );
+        })()}
+        {/* Droite : indicateur armé + bibliothèque */}
+        <div className="flex items-center gap-2 ml-auto">
+          {armedFoodId && nutritionMode === "advanced" && (
+            <div className="rounded-lg border border-teal-700/40 bg-teal-900/20 px-3 py-1.5 text-[11px] text-teal-400">
+              Cliquer sur le profil pour placer · Échap pour annuler
+            </div>
+          )}
+          <FoodLibrary
+            armedFoodId={armedFoodId}
+            disableArm={nutritionMode === "normal"}
+            foodLibrary={foodLibrary}
+            nutritionPlacements={nutritionPlacements}
+            onArmFood={(id) => setArmedFoodId((prev) => (prev === id ? null : id))}
+            openTrigger={foodLibraryTrigger}
+            setFoodLibrary={setFoodLibrary}
+            setNutritionPlacements={setNutritionPlacements}
+          />
+        </div>
+      </div>
+
+      {/* Résumé nutrition global */}
+      {totalTime > 0 && (() => {
+        const hours = totalTime / 3600;
+
+        let totalCarbs = 0, totalWater = 0, totalSodium = 0, totalCaffeine = 0;
+        if (nutritionMode === "normal") {
+          for (const assignments of Object.values(legNutritionPlan)) {
+            const t = computeLegNutrition(assignments, foodLibrary);
+            totalCarbs += t.carbs;
+            totalWater += t.water;
+            totalSodium += t.sodium;
+            totalCaffeine += t.caffeine;
+          }
+        } else {
+          const t = computeNutritionFromPlacements(nutritionPlacements, foodLibrary);
+          totalCarbs = t.carbs; totalWater = t.water;
+          totalSodium = t.sodium; totalCaffeine = t.caffeine;
+        }
+
+        const rows = [
+          { label: "Glucides", val: totalCarbs, tgt: Math.round(hours * carbsPerHour), perH: hours > 0 ? Math.round(totalCarbs / hours) : 0, unit: "g" },
+          { label: "Eau",      val: totalWater,  tgt: Math.round(hours * waterPerHour),  perH: hours > 0 ? Math.round(totalWater  / hours) : 0, unit: "mL" },
+          { label: "Sodium",   val: totalSodium, tgt: Math.round(hours * sodiumPerHour), perH: hours > 0 ? Math.round(totalSodium / hours) : 0, unit: "mg" },
+          ...(totalCaffeine > 0 ? [{ label: "Caféine", val: totalCaffeine, tgt: 0, perH: hours > 0 ? Math.round(totalCaffeine / hours) : 0, unit: "mg" }] : []),
+        ];
+
+        // Consolidation des aliments
+        const qtyById: Record<string, number> = {};
+        if (nutritionMode === "normal") {
+          for (const assignments of Object.values(legNutritionPlan)) {
+            for (const a of assignments) {
+              qtyById[a.foodItemId] = (qtyById[a.foodItemId] ?? 0) + a.quantity;
+            }
+          }
+        } else {
+          for (const p of nutritionPlacements) {
+            qtyById[p.foodItemId] = (qtyById[p.foodItemId] ?? 0) + 1;
+          }
+        }
+        const foodSummary = Object.entries(qtyById)
+          .map(([id, qty]) => ({ item: foodLibrary.find((f) => f.id === id), qty }))
+          .filter((e): e is { item: NonNullable<typeof e.item>; qty: number } => !!e.item)
+          .sort((a, b) => b.qty - a.qty);
+
+        return (
+          <div
+            className="mt-4 flex flex-col gap-4 border-gray-800 border-t pt-4"
+            data-print-section="summary"
+            {...(!printOptions.summary ? { "data-print-hide": "" } : {})}
+          >
+            <p className="font-medium text-[10px] text-gray-600 uppercase tracking-widest">Bilan</p>
+            <div className="flex gap-6">
+            {/* Tableau nutrition */}
+            <table className="shrink-0 border-collapse text-xs">
+              <thead>
+                <tr className="border-gray-800 border-b">
+                  <th className="pb-1.5 pr-8 text-left font-medium text-gray-600">Nutriment</th>
+                  <th className="pb-1.5 pr-8 text-right font-medium text-gray-600">/ heure</th>
+                  <th className="pb-1.5 pr-8 text-right font-medium text-gray-600">Total</th>
+                  <th className="pb-1.5 text-right font-medium text-gray-600">Objectif</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map(({ label, val, tgt, perH, unit }) => (
+                  <tr className="border-gray-800/50 border-b last:border-0" key={label}>
+                    <td className="py-1.5 pr-8 text-gray-500">{label}</td>
+                    <td className="py-1.5 pr-8 text-right text-gray-300">{perH} {unit}</td>
+                    <td className="py-1.5 pr-8 text-right text-gray-300">{val} {unit}</td>
+                    <td className="py-1.5 text-right text-gray-600">{tgt > 0 ? `${tgt} ${unit}` : "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+
+            {/* Séparateur vertical */}
+            {foodSummary.length > 0 && <div className="w-px shrink-0 bg-gray-800" />}
+
+            {/* Aliments à préparer */}
+            {foodSummary.length > 0 && (
+              <div className="flex min-w-0 flex-col gap-2">
+                <span className="font-medium text-[11px] text-gray-600 uppercase tracking-wide">Aliments à préparer</span>
+                <div className="flex flex-wrap gap-2">
+                  {foodSummary.map(({ item, qty }) => (
+                    <div className="flex items-center gap-1.5 rounded-lg border border-gray-800 bg-gray-900 px-2.5 py-1.5" key={item.id}>
+                      <img alt="" className="h-5 w-5 object-contain" height={20} src={foodIconSrc(item)} width={20} />
+                      <span className="text-gray-400 text-xs">{item.name}</span>
+                      <span className="font-medium text-gray-200 text-xs">× {qty}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            </div>
+          </div>
+        );
+      })()}
+
+      </div>{/* /printRef */}
+
+      {/* Timelines nutrition avec switch (mode avancé uniquement) */}
+      {nutritionMode === "advanced" && totalTime > 0 &&
         (() => {
           const t2 = 2 * bodyWeightKg;
           const t3 = 3 * bodyWeightKg;
@@ -2052,6 +2240,18 @@ export function AidStationPlanner({
           if (!activeTab) {
             return null;
           }
+
+          const totalCarbsRace = Math.round(
+            nutritionPlacements.reduce((sum, p) => {
+              const item = foodLibrary.find((f) => f.id === p.foodItemId);
+              return sum + (item?.carbsG ?? 0);
+            }, 0)
+          );
+          const totalTimeHRace = totalTime / 3600;
+          const avgCarbsPerHourRace =
+            totalTimeHRace > 0
+              ? Math.round(totalCarbsRace / totalTimeHRace)
+              : 0;
 
           return (
             <div className="flex flex-col gap-1">
@@ -2177,6 +2377,19 @@ export function AidStationPlanner({
                   />
                 )}
               </div>
+              {totalCarbsRace > 0 && (
+                <div className="flex items-center justify-end gap-1.5 pt-1">
+                  <span className="font-medium text-[11px] text-gray-500 uppercase tracking-wide">
+                    Total course
+                  </span>
+                  <span className="rounded-full border border-amber-700/40 bg-amber-900/30 px-2 py-0.5 font-medium text-[10px] text-amber-400">
+                    {totalCarbsRace}g glucides
+                  </span>
+                  <span className="rounded-full border border-amber-700/40 bg-amber-900/30 px-2 py-0.5 font-medium text-[10px] text-amber-400">
+                    {avgCarbsPerHourRace}g/h moy.
+                  </span>
+                </div>
+              )}
             </div>
           );
         })()}
@@ -2262,17 +2475,6 @@ export function AidStationPlanner({
                     )}
                   </div>
                   <div className="flex shrink-0 items-center gap-1">
-                    {endStation && (
-                      <Button
-                        className="h-7 w-7 text-gray-600 hover:bg-red-900/20 hover:text-red-400"
-                        onClick={() => setConfirmDeleteStationId(endStation.id)}
-                        size="icon"
-                        title="Supprimer ce ravito"
-                        variant="ghost"
-                      >
-                        <Trash2 size={13} />
-                      </Button>
-                    )}
                     <Button
                       className="h-7 w-7 text-gray-500 hover:text-gray-300"
                       onClick={() => {
@@ -2352,13 +2554,22 @@ export function AidStationPlanner({
                   </div>
                 </div>
 
-                {/* Nutrition — aliments placés dans ce tronçon */}
-                {(() => {
+                {/* Nutrition — aliments du tronçon */}
+                {nutritionMode === "normal" ? (
+                  <LegNutritionPanel
+                    assignments={legNutritionPlan[key] ?? []}
+                    carbsPerHour={carbsPerHour}
+                    foodLibrary={foodLibrary}
+                    legTime={leg.time}
+                    onAddFood={(foodItemId) => handleLegAddFood(selectedLegIdx, foodItemId)}
+                    onOpenLibrary={() => setFoodLibraryTrigger((t) => t + 1)}
+                    onRemoveFood={(foodItemId) => handleLegRemoveFood(selectedLegIdx, foodItemId)}
+                    sodiumPerHour={sodiumPerHour}
+                    waterPerHour={waterPerHour}
+                  />
+                ) : (() => {
                   const items = placementsForLeg(selectedLegIdx);
-                  const nutrition = computeNutritionFromPlacements(
-                    items,
-                    foodLibrary
-                  );
+                  const nutrition = computeNutritionFromPlacements(items, foodLibrary);
                   const hours = leg.time / 3600;
                   const targets = {
                     carbs: Math.round(hours * carbsPerHour),
@@ -2366,121 +2577,48 @@ export function AidStationPlanner({
                     sodium: Math.round(hours * sodiumPerHour),
                   };
                   const BILAN = [
-                    {
-                      key: "carbs",
-                      label: "Glucides",
-                      val: nutrition.carbs,
-                      tgt: targets.carbs,
-                      unit: "g",
-                      color: "text-amber-400",
-                    },
-                    {
-                      key: "water",
-                      label: "Eau",
-                      val: nutrition.water,
-                      tgt: targets.water,
-                      unit: "mL",
-                      color: "text-sky-400",
-                    },
-                    {
-                      key: "sodium",
-                      label: "Sodium",
-                      val: nutrition.sodium,
-                      tgt: targets.sodium,
-                      unit: "mg",
-                      color: "text-slate-300",
-                    },
+                    { key: "carbs", label: "Glucides", val: nutrition.carbs, tgt: targets.carbs, unit: "g", color: "text-amber-400" },
+                    { key: "water", label: "Eau", val: nutrition.water, tgt: targets.water, unit: "mL", color: "text-sky-400" },
+                    { key: "sodium", label: "Sodium", val: nutrition.sodium, tgt: targets.sodium, unit: "mg", color: "text-slate-300" },
                   ];
                   return (
                     <div className="flex flex-col gap-3">
                       <div className="flex items-center justify-between">
-                        <span className="font-medium text-[11px] text-gray-500 uppercase tracking-wide">
-                          Nutrition
-                        </span>
                         <div className="flex items-center gap-1.5">
-                          {BILAN.map(
-                            // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: complex by nature
-                            ({ key: bk, label: bl, val, tgt, unit, color }) => {
-                              const pct =
-                                tgt > 0 ? Math.round((val / tgt) * 100) : 0;
-                              const hasItems = items.length > 0;
-                              let statusClass: string;
-                              if (!hasItems) {
-                                statusClass = `bg-gray-700/30 border-gray-600/40 ${color}`;
-                              } else if (pct < 75 || pct > 130) {
-                                statusClass =
-                                  "bg-red-900/30 border-red-700/50 text-red-300";
-                              } else if (pct < 100 || pct > 115) {
-                                statusClass =
-                                  "bg-orange-900/30 border-orange-700/50 text-orange-300";
-                              } else {
-                                statusClass =
-                                  "bg-green-900/30 border-green-700/50 text-green-300";
-                              }
-                              return (
-                                <div
-                                  className={`flex items-center gap-1 rounded-full border px-2 py-0.5 font-medium text-[10px] ${statusClass}`}
-                                  key={bk}
-                                >
-                                  {hasItems ? (
-                                    <>
-                                      <span>{pct}%</span>
-                                      <span className="opacity-50">·</span>
-                                      <span className="opacity-75">
-                                        {val}
-                                        {unit}
-                                      </span>
-                                    </>
-                                  ) : (
-                                    "—"
-                                  )}
-                                  <span className="opacity-60">{bl}</span>
-                                </div>
-                              );
-                            }
-                          )}
+                          {BILAN.map(({ key: bk, label: bl, val, tgt, unit, color }) => {
+                            const pct = tgt > 0 ? Math.round((val / tgt) * 100) : 0;
+                            const hasItems = items.length > 0;
+                            let statusClass: string;
+                            if (!hasItems) statusClass = `bg-gray-700/30 border-gray-600/40 ${color}`;
+                            else if (pct < 75 || pct > 130) statusClass = "bg-red-900/30 border-red-700/50 text-red-300";
+                            else if (pct < 100 || pct > 115) statusClass = "bg-orange-900/30 border-orange-700/50 text-orange-300";
+                            else statusClass = "bg-green-900/30 border-green-700/50 text-green-300";
+                            return (
+                              <div className={`flex items-center gap-1 rounded-full border px-2 py-0.5 font-medium text-[10px] ${statusClass}`} key={bk}>
+                                {hasItems ? (<><span>{pct}%</span><span className="opacity-50">·</span><span className="opacity-75">{val}{unit}</span></>) : "—"}
+                                <span className="opacity-60">{bl}</span>
+                              </div>
+                            );
+                          })}
                         </div>
                       </div>
                       {items.length === 0 ? (
                         <p className="text-gray-600 text-xs italic">
-                          Sélectionner un aliment dans la bibliothèque puis
-                          cliquer sur le profil pour placer dans ce tronçon.
+                          Sélectionner un aliment dans la bibliothèque puis cliquer sur le profil pour placer dans ce tronçon.
                         </p>
                       ) : (
                         <div className="flex flex-wrap gap-2">
                           {items.map((p) => {
-                            const item = foodLibrary.find(
-                              (f) => f.id === p.foodItemId
-                            );
-                            if (!item) {
-                              return null;
-                            }
+                            const item = foodLibrary.find((f) => f.id === p.foodItemId);
+                            if (!item) return null;
                             return (
-                              <div
-                                className="flex items-center gap-1.5 rounded-lg bg-gray-800 px-2 py-1.5"
-                                key={p.id}
-                              >
-                                <img
-                                  alt=""
-                                  className="h-6 w-6 object-contain"
-                                  height={24}
-                                  src={foodIconSrc(item)}
-                                  width={24}
-                                />
+                              <div className="flex items-center gap-1.5 rounded-lg bg-gray-800 px-2 py-1.5" key={p.id}>
+                                <img alt="" className="h-6 w-6 object-contain" height={24} src={foodIconSrc(item)} width={24} />
                                 <div className="flex flex-col">
-                                  <span className="text-gray-300 text-xs">
-                                    {item.name}
-                                  </span>
-                                  <span className="text-[10px] text-gray-600">
-                                    {(p.distanceFromStart / 1000).toFixed(1)} km
-                                  </span>
+                                  <span className="text-gray-300 text-xs">{item.name}</span>
+                                  <span className="text-[10px] text-gray-600">{(p.distanceFromStart / 1000).toFixed(1)} km</span>
                                 </div>
-                                <button
-                                  className="ml-1 text-gray-600 transition-colors hover:text-red-400"
-                                  onClick={() => removePlacement(p.id)}
-                                  title="Retirer"
-                                  type="button"
-                                >
+                                <button className="ml-1 text-gray-600 transition-colors hover:text-red-400" onClick={() => removePlacement(p.id)} title="Retirer" type="button">
                                   <X size={12} />
                                 </button>
                               </div>
@@ -2491,10 +2629,69 @@ export function AidStationPlanner({
                     </div>
                   );
                 })()}
+                {/* Note du tronçon */}
+                <div className="flex flex-col gap-1.5">
+                  <span className="font-medium text-[11px] text-gray-500 uppercase tracking-wide">Note</span>
+                  <textarea
+                    className="w-full resize-none rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-gray-200 text-sm placeholder-gray-600 outline-none focus:border-gray-500"
+                    onChange={(e) =>
+                      setLegNotes((prev) => ({ ...prev, [key]: e.target.value }))
+                    }
+                    placeholder="Ajouter une note pour ce segment…"
+                    rows={2}
+                    value={legNotes[key] ?? ""}
+                  />
+                </div>
+
+                {/* Supprimer le ravito */}
+                {endStation && (
+                  <div className="flex justify-end border-gray-800 border-t pt-3">
+                    <button
+                      className="flex items-center gap-2 text-gray-600 text-sm transition-colors hover:text-gray-400"
+                      onClick={() => setConfirmDeleteStationId(endStation.id)}
+                      type="button"
+                    >
+                      <Trash2 size={14} />
+                      Supprimer le ravitaillement « {endStation.name} »
+                    </button>
+                  </div>
+                )}
               </dialog>
             </div>
           );
         })()}
+
+      {/* AlertDialog for mode switch confirmation */}
+      <AlertDialog
+        onOpenChange={(open) => {
+          if (!open) setPendingMode(null);
+        }}
+        open={!!pendingMode}
+      >
+        <AlertDialogContent className="border-gray-700 bg-gray-900 text-gray-100">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-gray-100">
+              Changer de mode nutrition
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-gray-400">
+              {pendingMode === "advanced"
+                ? "Passer en mode Avancé convertira vos quantités par tronçon en placements sur le profil. La conversion est approximative."
+                : "Passer en mode Normal convertira vos placements sur le profil en quantités par tronçon. Les positions exactes seront perdues."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="border-gray-700 bg-gray-800 text-gray-300 hover:bg-gray-700 hover:text-gray-100">
+              Annuler
+            </AlertDialogCancel>
+            <AlertDialogAction
+              className="border-0 bg-teal-900 text-teal-100 hover:bg-teal-800"
+              onClick={confirmModeSwitch}
+            >
+              Confirmer
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* AlertDialog for delete confirmation */}
       <AlertDialog
@@ -2543,6 +2740,35 @@ export function AidStationPlanner({
           Cliquer sur le profil pour placer un ravitaillement
         </p>
       )}
+
+      {/* Impression */}
+      <div className="flex items-center justify-between border-t border-gray-800 pt-4" data-print-hide="">
+        <div className="flex items-center gap-4">
+          <span className="text-[11px] text-gray-600">Inclure dans l'impression :</span>
+          {([
+            { key: "chart", label: "Graphique" },
+            { key: "summary", label: "Bilan" },
+          ] as const).map(({ key, label }) => (
+            <label className="flex cursor-pointer items-center gap-1.5 text-[11px] text-gray-400" key={key}>
+              <input
+                checked={printOptions[key]}
+                className="accent-teal-500"
+                onChange={(e) => setPrintOptions((p) => ({ ...p, [key]: e.target.checked }))}
+                type="checkbox"
+              />
+              {label}
+            </label>
+          ))}
+        </div>
+        <button
+          className="flex items-center gap-1.5 rounded-lg border border-gray-700 bg-gray-800 px-3 py-1.5 text-xs text-gray-300 transition-colors hover:bg-gray-700 hover:text-gray-100"
+          onClick={() => handlePrint()}
+          type="button"
+        >
+          <Printer size={13} />
+          Imprimer / Exporter PDF
+        </button>
+      </div>
     </div>
   );
 }

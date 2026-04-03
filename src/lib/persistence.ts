@@ -21,6 +21,9 @@ const DEFAULT_NUTRITION: NutritionState = {
   timeOverrides: {},
   paceSettings: { mode: "vap", sliderPace: 360, durationInput: "" },
   bodyWeightKg: 70,
+  nutritionMode: "normal",
+  legNutritionPlan: {},
+  legNotes: {},
 };
 
 interface TrailPrepDB extends DBSchema {
@@ -122,6 +125,10 @@ export async function loadProject(id: string): Promise<StoredProject | null> {
     return {
       ...project,
       nutritionPlacements: project.nutritionPlacements ?? [],
+      legNutritionPlan: project.legNutritionPlan ?? {},
+      legNotes: project.legNotes ?? {},
+      // Projets existants sans nutritionMode → mode avancé (ils utilisaient les placements)
+      nutritionMode: project.nutritionMode ?? "advanced",
     };
   } catch {
     return null;

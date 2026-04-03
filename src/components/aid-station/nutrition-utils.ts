@@ -162,6 +162,48 @@ export function migrateLegPlanToPlacements(
   return placements;
 }
 
+export function migratePlacementsToLegPlan(
+  nutritionPlacements: PlacedFoodItem[],
+  aidStations: AidStation[],
+  totalDistance: number
+): LegNutritionPlan {
+  const sorted = [...aidStations].sort(
+    (a, b) => a.distanceFromStart - b.distanceFromStart
+  );
+  const boundaries = [
+    0,
+    ...sorted.map((s) => s.distanceFromStart),
+    totalDistance,
+  ];
+
+  const plan: LegNutritionPlan = {};
+
+  for (let i = 0; i < boundaries.length - 1; i++) {
+    const fromDist = boundaries[i];
+    const toDist = boundaries[i + 1];
+    const key = i === 0 ? "depart" : (sorted[i - 1]?.id ?? `leg_${i}`);
+
+    const legPlacements = nutritionPlacements.filter(
+      (p) => p.distanceFromStart >= fromDist && p.distanceFromStart < toDist
+    );
+
+    const countByFood: Record<string, number> = {};
+    for (const p of legPlacements) {
+      countByFood[p.foodItemId] = (countByFood[p.foodItemId] ?? 0) + 1;
+    }
+
+    const assignments: LegFoodAssignment[] = Object.entries(countByFood).map(
+      ([foodItemId, quantity]) => ({ foodItemId, quantity })
+    );
+
+    if (assignments.length > 0) {
+      plan[key] = assignments;
+    }
+  }
+
+  return plan;
+}
+
 // ── Pharmacocinétique de la caféine ──────────────────────────────────────────
 
 /** Constante d'absorption : pic atteint en ~45 min */

@@ -613,7 +613,7 @@ export function NutritionRateChart({
               style={{ pointerEvents: "all" }}
             >
               <rect
-                fill="#161614"
+                fill="var(--chart-surface)"
                 height={H}
                 rx={4}
                 stroke="#3D3D37"
@@ -711,11 +711,11 @@ export function NutritionRateChart({
             cy={valToY(hoverVal)}
             fill={color}
             r={3}
-            stroke="#161614"
+            stroke="var(--chart-surface)"
             strokeWidth="1.5"
           />
           <rect
-            fill="#161614"
+            fill="var(--chart-surface)"
             height={32}
             rx={4}
             stroke="#3D3D37"

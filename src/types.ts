@@ -94,6 +94,8 @@ export interface LegFoodAssignment {
 
 export type LegNutritionPlan = Record<string, LegFoodAssignment[]>;
 
+export type NutritionMode = "normal" | "advanced";
+
 export interface PlacedFoodItem {
   distanceFromStart: number; // mètres — position absolue sur le parcours
   foodItemId: string; // ref vers FoodItem.id
@@ -119,8 +121,9 @@ export interface NutritionState {
   bodyWeightKg: number;
   foodLibrary: FoodItem[];
   hourlyTargets: HourlyTargets;
-  /** @deprecated use nutritionPlacements */
-  legNutritionPlan?: LegNutritionPlan;
+  legNotes: Record<string, string>;
+  legNutritionPlan: LegNutritionPlan;
+  nutritionMode: NutritionMode;
   nutritionPlacements: NutritionPlacements;
   paceSettings: PaceSettings;
   timeOverrides: Record<string, number>;

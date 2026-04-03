@@ -1,3 +1,4 @@
+import { BookOpen } from "lucide-react";
 import { useState } from "react";
 import type { FoodItem, LegFoodAssignment } from "../../types";
 import { computeLegNutrition } from "./nutrition-utils";
@@ -8,6 +9,7 @@ interface Props {
   foodLibrary: FoodItem[];
   legTime: number;
   onAddFood: (foodItemId: string) => void;
+  onOpenLibrary: () => void;
   onRemoveFood: (foodItemId: string) => void;
   sodiumPerHour: number;
   waterPerHour: number;
@@ -160,6 +162,7 @@ export function LegNutritionPanel({
   waterPerHour,
   sodiumPerHour,
   onAddFood,
+  onOpenLibrary,
   onRemoveFood,
 }: Props) {
   const totals = computeLegNutrition(assignments, foodLibrary);
@@ -180,9 +183,6 @@ export function LegNutritionPanel({
     <div className="flex flex-col gap-3">
       {/* Header + bilan pills */}
       <div className="flex items-center justify-between">
-        <span className="font-medium text-[11px] text-gray-500 uppercase tracking-wide">
-          Nutrition
-        </span>
         <div className="flex items-center gap-1.5">
           {BILAN_ROWS.map(({ key, label, unit, color, bg, border }) => {
             const val = actual[key];
@@ -221,7 +221,22 @@ export function LegNutritionPanel({
               </div>
             );
           })}
+          {totals.caffeine > 0 && (
+            <div className="flex items-center gap-1 rounded-full border border-violet-700/40 bg-violet-900/30 px-2 py-0.5 font-medium text-[10px] text-violet-300">
+              <span>{totals.caffeine} mg</span>
+              <span className="opacity-60">Caféine</span>
+            </div>
+          )}
         </div>
+        <button
+          className="flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] text-gray-500 transition-colors hover:bg-gray-800 hover:text-gray-300"
+          onClick={onOpenLibrary}
+          title="Ouvrir la bibliothèque d'aliments"
+          type="button"
+        >
+          <BookOpen size={12} />
+          Bibliothèque
+        </button>
       </div>
 
       {foodLibrary.length === 0 ? (
