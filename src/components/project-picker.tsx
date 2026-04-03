@@ -68,7 +68,7 @@ export function ProjectPicker({
   }
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex min-w-0 flex-col gap-3">
       {projects.length > 0 && (
         <div className="flex flex-col gap-1 overflow-hidden">
           {projects.map((p) => {
@@ -76,7 +76,7 @@ export function ProjectPicker({
             const isEditing = editingId === p.id;
             return (
               <div
-                className={`group relative flex items-center gap-2 rounded-lg px-3 py-2.5 transition-colors ${
+                className={`group relative flex min-w-0 items-center gap-2 overflow-hidden rounded-lg px-3 py-2.5 transition-colors ${
                   isActive ? "bg-gray-700" : "hover:bg-gray-800"
                 }`}
                 key={p.id}
@@ -117,7 +117,7 @@ export function ProjectPicker({
                 ) : (
                   <>
                     <button
-                      className="flex min-w-0 flex-1 flex-col items-start pr-16 text-left"
+                      className="flex min-w-0 flex-1 overflow-hidden flex-col items-start pr-16 text-left"
                       onClick={() => onOpen(p.id)}
                       type="button"
                     >
