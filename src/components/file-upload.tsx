@@ -23,9 +23,10 @@ export function FileUpload({ onFile }: Props) {
   }
 
   return (
-    // biome-ignore lint/a11y/noNoninteractiveElementInteractions: label drop-zone requires drag event handlers
-    <label
+    // biome-ignore lint/a11y/noNoninteractiveElementInteractions: div drop-zone requires drag and click event handlers
+    <div
       className={`flex cursor-pointer flex-col items-center justify-center gap-4 rounded-2xl border-2 border-dashed p-16 transition-colors ${dragging ? "border-blue-400 bg-blue-950" : "border-gray-600 bg-gray-900 hover:border-gray-500 hover:bg-gray-800"}`}
+      onClick={() => inputRef.current?.click()}
       onDragLeave={() => setDragging(false)}
       onDragOver={(e) => {
         e.preventDefault();
@@ -36,6 +37,11 @@ export function FileUpload({ onFile }: Props) {
         setDragging(false);
         handleFiles(e.dataTransfer.files);
       }}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") inputRef.current?.click();
+      }}
+      role="button"
+      tabIndex={0}
     >
       <svg
         aria-hidden="true"
@@ -61,7 +67,10 @@ export function FileUpload({ onFile }: Props) {
       </div>
       <Button
         className="border-gray-600 bg-transparent text-gray-400 hover:border-gray-500 hover:bg-gray-700 hover:text-gray-200"
-        onClick={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.stopPropagation();
+          inputRef.current?.click();
+        }}
         size="sm"
         type="button"
         variant="outline"
@@ -75,6 +84,6 @@ export function FileUpload({ onFile }: Props) {
         ref={inputRef}
         type="file"
       />
-    </label>
+    </div>
   );
 }

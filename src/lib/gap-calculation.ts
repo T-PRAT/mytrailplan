@@ -326,7 +326,10 @@ export function formatTime(totalSeconds: number): string {
   if (h === 0) {
     return `${m}min`;
   }
-  return `${h}h ${String(m).padStart(2, "0")}min`;
+  if (m === 0) {
+    return `${h}h`;
+  }
+  return `${h}h${String(m).padStart(2, "0")}`;
 }
 
 /**

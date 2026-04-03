@@ -39,7 +39,7 @@ const VIEW_H = 300;
 const CHART_W = VIEW_W - PAD_LEFT - PAD_RIGHT;
 const CHART_H = VIEW_H - PAD_TOP - PAD_BOTTOM;
 
-const PACE_LINE_COLOR = "#F0EDE5";
+const PACE_LINE_COLOR = "var(--chart-foreground)";
 const DEFAULT_GAP_PACE = 360; // 6:00/km
 const SLIDER_MIN = 180; // 3:00/km
 const SLIDER_MAX = 1200; // 20:00/km
@@ -318,8 +318,13 @@ export function GapSimulator({
       ? activeSegTime / (activeSeg.distance / 1000)
       : null;
 
+  const activeSegVerticalSpeed =
+    activeSeg && activeSegTime != null && activeSegTime > 0
+      ? Math.round((activeSeg.elevationChange * 3600) / activeSegTime)
+      : null;
+
   const segTooltipW = 130;
-  const segTooltipH = activeSegAvgPace == null ? 58 : 72;
+  const segTooltipH = activeSegAvgPace == null ? 58 : 86;
   const segTooltipX = activeSeg
     ? (() => {
         const cx =
@@ -375,9 +380,13 @@ export function GapSimulator({
     );
   });
 
+  const hoverVerticalSpeed = hoverSim
+    ? Math.round(hoverSim.actualSpeed * 3600 * (hoverSlope / 100))
+    : 0;
+
   const hoverTooltipOnLeft = hover ? hover.svgX > VIEW_W / 2 : false;
   const hoverTooltipW = 155;
-  const hoverTooltipH = hoverSim ? 60 : 46;
+  const hoverTooltipH = hoverSim ? 76 : 46;
   const hoverTooltipY = PAD_TOP + 4;
 
   // Curseur : pointeur si on est sur un segment, sinon crosshair
@@ -685,14 +694,14 @@ export function GapSimulator({
               cy={toYEle(hoverEle)}
               fill={slopeHexFn(hoverSlope)}
               r={3.5}
-              stroke="#161614"
+              stroke="var(--chart-surface)"
               strokeWidth={1.5}
             />
             {/* Tooltip curseur (seulement si pas de segment survolé) */}
             {hoveredSegIdx === null && (
               <g>
                 <rect
-                  fill="#161614"
+                  fill="var(--chart-surface)"
                   height={hoverTooltipH}
                   rx={5}
                   stroke="#3D3D37"
@@ -736,20 +745,36 @@ export function GapSimulator({
                   {hoverSlope.toFixed(1)}%
                 </text>
                 {hoverSim && (
-                  <text
-                    fill={PACE_LINE_COLOR}
-                    fontSize={13}
-                    fontWeight="600"
-                    textAnchor="middle"
-                    x={
-                      hoverTooltipOnLeft
-                        ? hover.svgX - 8 - hoverTooltipW / 2
-                        : hover.svgX + 8 + hoverTooltipW / 2
-                    }
-                    y={hoverTooltipY + 52}
-                  >
-                    {formatPace(hoverSim.actualPace)}/km
-                  </text>
+                  <>
+                    <text
+                      fill={PACE_LINE_COLOR}
+                      fontSize={13}
+                      fontWeight="600"
+                      textAnchor="middle"
+                      x={
+                        hoverTooltipOnLeft
+                          ? hover.svgX - 8 - hoverTooltipW / 2
+                          : hover.svgX + 8 + hoverTooltipW / 2
+                      }
+                      y={hoverTooltipY + 52}
+                    >
+                      {formatPace(hoverSim.actualPace)}/km
+                    </text>
+                    <text
+                      fill="#8A8880"
+                      fontSize={11}
+                      textAnchor="middle"
+                      x={
+                        hoverTooltipOnLeft
+                          ? hover.svgX - 8 - hoverTooltipW / 2
+                          : hover.svgX + 8 + hoverTooltipW / 2
+                      }
+                      y={hoverTooltipY + 68}
+                    >
+                      {hoverVerticalSpeed >= 0 ? "+" : ""}
+                      {hoverVerticalSpeed} m/h
+                    </text>
+                  </>
                 )}
               </g>
             )}
@@ -779,7 +804,7 @@ export function GapSimulator({
             return (
               <g>
                 <rect
-                  fill="#161614"
+                  fill="var(--chart-surface)"
                   height={segTooltipH}
                   rx={6}
                   stroke={color}
@@ -821,17 +846,31 @@ export function GapSimulator({
                   {(activeSeg.endDistance / 1000).toFixed(1)}
                 </text>
                 {activeSegAvgPace != null && (
-                  <text
-                    fill={PACE_LINE_COLOR}
-                    fontSize={12}
-                    fontWeight="600"
-                    textAnchor="middle"
-                    x={segTooltipX + segTooltipW / 2}
-                    y={segTooltipY + 61}
-                  >
-                    {formatPace(activeSegAvgPace)}/km ·{" "}
-                    {activeSegTime == null ? "" : formatTime(activeSegTime)}
-                  </text>
+                  <>
+                    <text
+                      fill={PACE_LINE_COLOR}
+                      fontSize={12}
+                      fontWeight="600"
+                      textAnchor="middle"
+                      x={segTooltipX + segTooltipW / 2}
+                      y={segTooltipY + 61}
+                    >
+                      {formatPace(activeSegAvgPace)}/km ·{" "}
+                      {activeSegTime == null ? "" : formatTime(activeSegTime)}
+                    </text>
+                    {activeSegVerticalSpeed != null && (
+                      <text
+                        fill="#8A8880"
+                        fontSize={11}
+                        textAnchor="middle"
+                        x={segTooltipX + segTooltipW / 2}
+                        y={segTooltipY + 76}
+                      >
+                        {activeSegVerticalSpeed >= 0 ? "+" : ""}
+                        {activeSegVerticalSpeed} m/h
+                      </text>
+                    )}
+                  </>
                 )}
               </g>
             );

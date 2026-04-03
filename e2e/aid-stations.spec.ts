@@ -30,7 +30,7 @@ test.describe("Onglet Ravitaillements", () => {
     await page.getByRole("button", { name: "Ajouter" }).click();
 
     // Station appears in the SVG chart as a text label
-    await expect(page.getByText("Ravito 1")).toBeVisible();
+    await expect(page.locator("svg text").filter({ hasText: "Ravito 1" }).first()).toBeVisible();
   });
 
   test("can delete an aid station with confirmation", async ({ page }) => {
@@ -38,7 +38,7 @@ test.describe("Onglet Ravitaillements", () => {
     await page.getByRole("button", { name: "+ Ravito" }).click();
     await page.locator('input[placeholder="km"]').fill("2");
     await page.getByRole("button", { name: "Ajouter" }).click();
-    await expect(page.getByText("Ravito 1")).toBeVisible();
+    await expect(page.locator("svg text").filter({ hasText: "Ravito 1" }).first()).toBeVisible();
 
     // Use keyboard navigation to open the edit popover:
     // the station <g> has tabIndex=0 and onKeyDown that opens popover on Enter
@@ -58,8 +58,8 @@ test.describe("Onglet Ravitaillements", () => {
     await expect(alertDialog).toBeVisible();
     await alertDialog.getByRole("button", { name: "Supprimer" }).click();
 
-    // Station should be gone
-    await expect(page.getByText("Ravito 1")).not.toBeVisible();
+    // Station should be gone from SVG
+    await expect(page.locator("svg text").filter({ hasText: "Ravito 1" })).not.toBeVisible();
   });
 
   test("food library drawer opens with default items", async ({ page }) => {
@@ -67,10 +67,11 @@ test.describe("Onglet Ravitaillements", () => {
     await page.getByRole("button", { name: /Bibliothèque d'aliments/ }).click();
 
     // Default items should be visible in the drawer
-    await expect(page.getByText("Flasque eau")).toBeVisible();
-    await expect(page.getByText("Gel classique")).toBeVisible();
-    await expect(page.getByText("Barre énergie")).toBeVisible();
-    await expect(page.getByText("Comprimé caféine")).toBeVisible();
+    const drawer = page.getByRole("dialog", { name: "Bibliothèque d'aliments" });
+    await expect(drawer.getByText("Flasque eau")).toBeVisible();
+    await expect(drawer.getByText("Gel classique")).toBeVisible();
+    await expect(drawer.getByText("Barre énergie")).toBeVisible();
+    await expect(drawer.getByText("Comprimé caféine")).toBeVisible();
     // "Ajouter un aliment" button is also in the drawer
     await expect(page.getByText("Ajouter un aliment")).toBeVisible();
   });
@@ -78,7 +79,7 @@ test.describe("Onglet Ravitaillements", () => {
   test("nutrition target controls are interactive", async ({ page }) => {
     await expect(page.getByText("g/h").first()).toBeVisible();
     await expect(page.getByText("mL/h").first()).toBeVisible();
-    await expect(page.getByText("Eau")).toBeVisible();
-    await expect(page.getByText("Sodium")).toBeVisible();
+    await expect(page.getByText("Eau").first()).toBeVisible();
+    await expect(page.getByText("Sodium").first()).toBeVisible();
   });
 });

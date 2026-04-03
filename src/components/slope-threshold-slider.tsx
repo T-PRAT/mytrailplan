@@ -302,12 +302,12 @@ export function SlopeThresholdSlider({
                 cy={hy}
                 fill={isDragging ? "#ffffff" : "#B0ADA5"}
                 r={HANDLE_R}
-                stroke="#161614"
+                stroke="var(--chart-surface)"
                 strokeWidth={2}
               />
               {/* Label valeur au-dessus */}
               <text
-                fill="#F0EDE5"
+                fill="var(--chart-foreground)"
                 fontSize={10}
                 fontWeight="600"
                 textAnchor="middle"

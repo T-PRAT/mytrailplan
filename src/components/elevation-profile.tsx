@@ -357,11 +357,11 @@ export function ElevationProfile({
               cy={toY(hover.elevation)}
               fill={hover.slopeColor}
               r={4}
-              stroke="#161614"
+              stroke="var(--chart-surface)"
               strokeWidth={1.5}
             />
             <rect
-              fill="#161614"
+              fill="var(--chart-surface)"
               height={tooltipH}
               rx={5}
               stroke="#3D3D37"

@@ -328,11 +328,11 @@ export function RunWalkAnalysis({ sections, profilePoints }: Props) {
               cy={toY(hover.elevation)}
               fill={sectionColor}
               r={4}
-              stroke="#161614"
+              stroke="var(--chart-surface)"
               strokeWidth={1.5}
             />
             <rect
-              fill="#161614"
+              fill="var(--chart-surface)"
               height={tooltipH}
               rx={5}
               stroke="#3D3D37"

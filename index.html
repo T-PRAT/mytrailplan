@@ -1,7 +1,15 @@
 <!doctype html>
-<html lang="fr" class="dark" style="background:#0E0E0E">
+<html lang="fr">
   <head>
     <meta charset="UTF-8">
+    <script>
+      (function () {
+        var t = localStorage.getItem('trailprep-theme');
+        var dark = t === 'dark' || (t !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches);
+        if (dark) document.documentElement.classList.add('dark');
+        document.documentElement.style.background = dark ? '#0e0e0e' : '#f5f2eb';
+      })();
+    </script>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>TrailPrep</title>
