@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { ThemeToggle } from "./components/theme-toggle";
+import { useTheme } from "./hooks/use-theme";
 import {
   Dialog,
   DialogContent,
@@ -24,18 +26,19 @@ import type { AnalysisResult, NutritionState } from "./types";
 type Tab = "pentes" | "course-marche" | "simulateur" | "ravitaillements";
 
 const TABS: { id: Tab; label: string }[] = [
+  { id: "ravitaillements", label: "Plan de course" },
   { id: "pentes", label: "Pentes" },
   { id: "course-marche", label: "Course / Marche" },
   { id: "simulateur", label: "Simulateur VAP" },
-  { id: "ravitaillements", label: "Ravitaillements" },
 ];
 
 export default function App() {
+  const { theme, toggleTheme } = useTheme();
   const [result, setResult] = useState<AnalysisResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [thresholds, setThresholds] = useState<number[]>([5, 10, 20, 30]);
   const [showThresholdConfig, setShowThresholdConfig] = useState(false);
-  const [activeTab, setActiveTab] = useState<Tab>("pentes");
+  const [activeTab, setActiveTab] = useState<Tab>("ravitaillements");
   const [pickerOpen, setPickerOpen] = useState(false);
 
   const {
@@ -80,7 +83,7 @@ export default function App() {
   async function handleOpen(id: string) {
     setPickerOpen(false);
     await openProject(id);
-    setActiveTab("pentes");
+    setActiveTab("ravitaillements");
   }
 
   const handleNutritionStateChange = useCallback(
@@ -155,14 +158,14 @@ export default function App() {
       <path
         d="M0,44 C6,43 10,40 15,33 C21,24 25,14 30,8 C32,4 34,3 36,5 C39,8 42,15 45,23 C48,30 50,33 53,32 C55,30 57,24 59,18 C61,14 62,16 63,21 C65,28 66,38 68,44"
         fill="none"
-        stroke="#F0EDE5"
+        stroke="var(--chart-foreground)"
         stroke-linecap="round"
         stroke-opacity="0.5"
         stroke-width="1.5"
       />
       <text
         dominant-baseline="middle"
-        fill="#F0EDE5"
+        fill="var(--chart-foreground)"
         font-family="system-ui, sans-serif"
         font-size="22"
         font-weight="700"
@@ -251,7 +254,11 @@ export default function App() {
               <TabsList className="h-auto gap-1 rounded-none bg-transparent p-0">
                 {TABS.map((tab) => (
                   <TabsTrigger
-                    className="-mb-px rounded-none border-transparent border-b-2 px-4 py-3 font-medium text-gray-500 text-sm transition-colors hover:border-gray-600 hover:text-gray-300 data-[state=active]:border-gray-300 data-[state=active]:bg-transparent data-[state=active]:text-gray-100 data-[state=active]:shadow-none"
+                    className={`-mb-px rounded-none border-transparent border-b-2 px-4 py-3 text-sm transition-colors data-[state=active]:bg-transparent data-[state=active]:shadow-none ${
+                      tab.id === "ravitaillements"
+                        ? "tab-main"
+                        : "font-medium text-gray-500 hover:border-gray-600 hover:text-gray-300 data-[state=active]:border-gray-300 data-[state=active]:text-gray-100"
+                    }`}
                     key={tab.id}
                     value={tab.id}
                   >
@@ -337,12 +344,23 @@ export default function App() {
               </TabsContent>
             </div>
           </Tabs>
+
+          {/* Footer */}
+          <footer className="flex items-center justify-between border-gray-800 border-t px-10 py-4">
+            <p className="text-gray-600 text-xs">
+              Ton plan de course, étape par étape.
+            </p>
+            <div className="flex items-center gap-4">
+              <span className="text-gray-600 text-xs">© {new Date().getFullYear()} T-PRAT</span>
+              <ThemeToggle onToggle={toggleTheme} theme={theme} />
+            </div>
+          </footer>
         </div>
       )}
 
       {/* Project picker dialog */}
       <Dialog onOpenChange={setPickerOpen} open={pickerOpen}>
-        <DialogContent className="w-full max-w-xl border-gray-700 bg-gray-900">
+        <DialogContent className="w-full max-w-xl overflow-hidden border-gray-700 bg-gray-900">
           <DialogHeader>
             <DialogTitle className="text-gray-100">Mes projets</DialogTitle>
           </DialogHeader>
