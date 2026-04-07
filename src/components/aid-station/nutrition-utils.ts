@@ -6,6 +6,34 @@ import type {
   PlacedFoodItem,
 } from "../../types";
 
+export function computeLegBoundaries(
+  aidStations: AidStation[],
+  totalDistance: number
+): { boundaries: number[]; sorted: AidStation[] } {
+  const sorted = [...aidStations].sort(
+    (a, b) => a.distanceFromStart - b.distanceFromStart
+  );
+  const boundaries = [
+    0,
+    ...sorted.map((s) => s.distanceFromStart),
+    totalDistance,
+  ];
+  return { boundaries, sorted };
+}
+
+export function foodIconSrc(item: FoodItem): string {
+  if (item.type === "flask") {
+    return item.hasPowder ? "/food/iso.png" : "/food/water.png";
+  }
+  if (item.type === "gel") {
+    return "/food/gel.png";
+  }
+  if (item.type === "pill") {
+    return "/food/pill.png";
+  }
+  return "/food/bar.png";
+}
+
 export function getDefaultFoodLibrary(): FoodItem[] {
   return [
     {
@@ -128,14 +156,10 @@ export function migrateLegPlanToPlacements(
   aidStations: AidStation[],
   totalDistance: number
 ): PlacedFoodItem[] {
-  const sorted = [...aidStations].sort(
-    (a, b) => a.distanceFromStart - b.distanceFromStart
+  const { boundaries, sorted } = computeLegBoundaries(
+    aidStations,
+    totalDistance
   );
-  const boundaries = [
-    0,
-    ...sorted.map((s) => s.distanceFromStart),
-    totalDistance,
-  ];
 
   const placements: PlacedFoodItem[] = [];
 
@@ -167,14 +191,10 @@ export function migratePlacementsToLegPlan(
   aidStations: AidStation[],
   totalDistance: number
 ): LegNutritionPlan {
-  const sorted = [...aidStations].sort(
-    (a, b) => a.distanceFromStart - b.distanceFromStart
+  const { boundaries, sorted } = computeLegBoundaries(
+    aidStations,
+    totalDistance
   );
-  const boundaries = [
-    0,
-    ...sorted.map((s) => s.distanceFromStart),
-    totalDistance,
-  ];
 
   const plan: LegNutritionPlan = {};
 

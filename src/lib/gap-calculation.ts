@@ -11,6 +11,10 @@ const MIN_COST_RATIO = 0.88; // Plafond bas en descente (correction Strava vs Mi
 const MIN_ELEVATION_CHANGE = 100; // Seuil minimum de D+/D- pour détecter un segment (mètres)
 const REVERSAL_TOLERANCE = 30; // Tolérance avant de considérer un changement de direction (mètres)
 
+export const DEFAULT_GAP_PACE = 360; // 6:00/km
+export const PACE_SLIDER_MIN = 180; // 3:00/km
+export const PACE_SLIDER_MAX = 1200; // 20:00/km
+
 const RE_HMS = /^(\d+):(\d{2})(?::(\d{2}))?$/;
 const RE_HM = /^(\d+)h(\d+)m?$|^(\d+)h$/;
 const RE_MINS = /^(\d+)$/;

@@ -1,7 +1,7 @@
 import { BookOpen } from "lucide-react";
 import { useState } from "react";
 import type { FoodItem, LegFoodAssignment } from "../../types";
-import { computeLegNutrition } from "./nutrition-utils";
+import { computeLegNutrition, foodIconSrc } from "./nutrition-utils";
 
 interface Props {
   assignments: LegFoodAssignment[];
@@ -42,19 +42,6 @@ const BILAN_ROWS = [
   },
 ] as const;
 
-function foodIcon(item: FoodItem): string {
-  if (item.type === "flask") {
-    return item.hasPowder ? "/food/iso.png" : "/food/water.png";
-  }
-  if (item.type === "gel") {
-    return "/food/gel.png";
-  }
-  if (item.type === "pill") {
-    return "/food/pill.png";
-  }
-  return "/food/bar.png";
-}
-
 function FoodCard({
   item,
   qty,
@@ -67,7 +54,7 @@ function FoodCard({
   onRemove: () => void;
 }) {
   const [hovered, setHovered] = useState(false);
-  const icon = foodIcon(item);
+  const icon = foodIconSrc(item);
   const hasMacros =
     item.carbsG > 0 ||
     item.sodiumMg > 0 ||

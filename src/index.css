@@ -19,6 +19,10 @@
     --chart-foreground: #1a1916;
   }
 
+  @page {
+    margin: 10mm 8mm;
+  }
+
   /* Masquer les éléments interactifs */
   [data-print-hide] {
     display: none !important;

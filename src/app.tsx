@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Pencil } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ThemeToggle } from "./components/theme-toggle";
 import { useTheme } from "./hooks/use-theme";
 import {
@@ -16,7 +17,6 @@ import { GapSimulator } from "./components/gap-simulator";
 import { ProjectPicker } from "./components/project-picker";
 import { RunWalkAnalysis } from "./components/run-walk-analysis";
 import { SlopeThresholdSlider } from "./components/slope-threshold-slider";
-import { SummaryStats } from "./components/summary-stats";
 import { useProjectManager } from "./hooks/use-project-manager";
 import { interpolateHexColors, slopeHexDynamic } from "./lib/colors";
 import { parseGpx } from "./lib/gpx-parser";
@@ -40,6 +40,9 @@ export default function App() {
   const [showThresholdConfig, setShowThresholdConfig] = useState(false);
   const [activeTab, setActiveTab] = useState<Tab>("ravitaillements");
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [renamingHeader, setRenamingHeader] = useState(false);
+  const [renameValue, setRenameValue] = useState("");
+  const renameInputRef = useRef<HTMLInputElement>(null);
 
   const {
     ready,
@@ -84,6 +87,23 @@ export default function App() {
     setPickerOpen(false);
     await openProject(id);
     setActiveTab("ravitaillements");
+  }
+
+  function startRenaming() {
+    if (!activeProject) return;
+    setRenameValue(activeProject.name);
+    setRenamingHeader(true);
+    setTimeout(() => {
+      renameInputRef.current?.select();
+    }, 0);
+  }
+
+  function confirmRename() {
+    const trimmed = renameValue.trim();
+    if (trimmed && activeProject && trimmed !== activeProject.name) {
+      renameProject(activeProject.id, trimmed);
+    }
+    setRenamingHeader(false);
   }
 
   const handleNutritionStateChange = useCallback(
@@ -132,43 +152,49 @@ export default function App() {
       xmlns="http://www.w3.org/2000/svg"
     >
       <defs>
-        <linearGradient id="logo-grad" x1="0" x2="1" y1="0" y2="0">
-          <stop offset="0%" stop-color="#1B3A4B" />
-          <stop offset="12%" stop-color="#2E6B8A" />
-          <stop offset="25%" stop-color="#4AADAD" />
-          <stop offset="37%" stop-color="#7DCFB6" />
-          <stop offset="50%" stop-color="#E8E4D9" />
-          <stop offset="62%" stop-color="#E8C170" />
-          <stop offset="75%" stop-color="#E07B4F" />
-          <stop offset="87%" stop-color="#C7453B" />
-          <stop offset="100%" stop-color="#8B1E3F" />
-        </linearGradient>
         <clipPath id="logo-clip">
           <path d="M0,44 C6,43 10,40 15,33 C21,24 25,14 30,8 C32,4 34,3 36,5 C39,8 42,15 45,23 C48,30 50,33 53,32 C55,30 57,24 59,18 C61,14 62,16 63,21 C65,28 66,38 68,44 Z" />
         </clipPath>
       </defs>
-      <rect
-        clip-path="url(#logo-clip)"
-        fill="url(#logo-grad)"
-        height="42"
-        width="68"
-        x="0"
-        y="3"
-      />
+      {/* Color bands clipped to elevation shape */}
+      <g clipPath="url(#logo-clip)">
+        <rect x="0"   y="2" width="8.5" height="44" fill="#1B3A4B" />
+        <rect x="8.5" y="2" width="8.5" height="44" fill="#2E6B8A" />
+        <rect x="17"  y="2" width="8.5" height="44" fill="#4AADAD" />
+        <rect x="25.5" y="2" width="8.5" height="44" fill="#7DCFB6" />
+        <rect x="34"  y="2" width="8.5" height="44" fill="#E8C170" />
+        <rect x="42.5" y="2" width="8.5" height="44" fill="#E07B4F" />
+        <rect x="51"  y="2" width="8.5" height="44" fill="#C7453B" />
+        <rect x="59.5" y="2" width="8.5" height="44" fill="#8B1E3F" />
+        {/* Separators */}
+        <line x1="8.5"  y1="2" x2="8.5"  y2="46" stroke="var(--chart-background)" strokeWidth="0.5" opacity="0.4" />
+        <line x1="17"   y1="2" x2="17"   y2="46" stroke="var(--chart-background)" strokeWidth="0.5" opacity="0.4" />
+        <line x1="25.5" y1="2" x2="25.5" y2="46" stroke="var(--chart-background)" strokeWidth="0.5" opacity="0.4" />
+        <line x1="34"   y1="2" x2="34"   y2="46" stroke="var(--chart-background)" strokeWidth="0.5" opacity="0.4" />
+        <line x1="42.5" y1="2" x2="42.5" y2="46" stroke="var(--chart-background)" strokeWidth="0.5" opacity="0.4" />
+        <line x1="51"   y1="2" x2="51"   y2="46" stroke="var(--chart-background)" strokeWidth="0.5" opacity="0.4" />
+        <line x1="59.5" y1="2" x2="59.5" y2="46" stroke="var(--chart-background)" strokeWidth="0.5" opacity="0.4" />
+      </g>
+      {/* Profile line */}
       <path
         d="M0,44 C6,43 10,40 15,33 C21,24 25,14 30,8 C32,4 34,3 36,5 C39,8 42,15 45,23 C48,30 50,33 53,32 C55,30 57,24 59,18 C61,14 62,16 63,21 C65,28 66,38 68,44"
         fill="none"
         stroke="var(--chart-foreground)"
-        stroke-linecap="round"
-        stroke-opacity="0.5"
-        stroke-width="1.5"
+        strokeLinecap="round"
+        strokeOpacity="0.4"
+        strokeWidth="1.5"
       />
+      {/* Aid station markers — y values matched to bezier curve */}
+      <circle cx="3" cy="44" r="2.5" fill="var(--chart-foreground)" stroke="var(--chart-background)" strokeWidth="1.2" />
+      <circle cx="18" cy="27" r="2.5" fill="var(--chart-foreground)" stroke="var(--chart-background)" strokeWidth="1.2" />
+      <circle cx="50" cy="32" r="2.5" fill="var(--chart-foreground)" stroke="var(--chart-background)" strokeWidth="1.2" />
+      <circle cx="68" cy="44" r="2.5" fill="var(--chart-foreground)" stroke="var(--chart-background)" strokeWidth="1.2" />
       <text
-        dominant-baseline="middle"
+        dominantBaseline="middle"
         fill="var(--chart-foreground)"
-        font-family="system-ui, sans-serif"
-        font-size="22"
-        font-weight="700"
+        fontFamily="system-ui, sans-serif"
+        fontSize="22"
+        fontWeight="700"
         x="78"
         y="30"
       >
@@ -224,9 +250,36 @@ export default function App() {
           <div className="flex items-center justify-between gap-6 border-gray-800 border-b px-10 py-4">
             <Logo />
             <div className="flex min-w-0 flex-1 flex-col items-center gap-1">
-              <p className="truncate font-medium text-gray-300 text-sm">
-                {activeProject.name}
-              </p>
+              <div className="flex items-center gap-1.5">
+                {renamingHeader ? (
+                  <input
+                    ref={renameInputRef}
+                    className="rounded-md border border-gray-600 bg-gray-800 px-2 py-0.5 font-medium text-gray-100 text-sm outline-none focus:border-gray-400"
+                    onBlur={confirmRename}
+                    onChange={(e) => setRenameValue(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") confirmRename();
+                      if (e.key === "Escape") setRenamingHeader(false);
+                    }}
+                    type="text"
+                    value={renameValue}
+                  />
+                ) : (
+                  <p className="truncate font-medium text-gray-300 text-sm">
+                    {activeProject.name}
+                  </p>
+                )}
+                {!renamingHeader && (
+                  <button
+                    className="text-gray-600 transition-colors hover:text-gray-300"
+                    onClick={startRenaming}
+                    title="Renommer le projet"
+                    type="button"
+                  >
+                    <Pencil size={12} />
+                  </button>
+                )}
+              </div>
               <div className="flex items-center gap-2 text-gray-500 text-xs">
                 <span>{(result.totalDistance / 1000).toFixed(1)} km</span>
                 <span className="text-gray-700">·</span>
@@ -270,7 +323,6 @@ export default function App() {
 
             <div className="flex flex-col gap-6 px-10 py-6 pb-10">
               <TabsContent className="mt-0 flex flex-col gap-6" value="pentes">
-                <SummaryStats result={result} />
                 <ElevationProfile
                   profilePoints={result.profilePoints}
                   sections={result.sections}

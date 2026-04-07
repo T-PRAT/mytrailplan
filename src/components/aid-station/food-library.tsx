@@ -10,11 +10,13 @@ import { useEffect, useRef, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { NumberStepper } from "@/components/ui/number-stepper";
 import type { FoodItem, FoodItemType, NutritionPlacements } from "../../types";
+import { foodIconSrc } from "./nutrition-utils";
 
 interface Props {
   armedFoodId: string | null;
   disableArm?: boolean;
   foodLibrary: FoodItem[];
+  hideTrigger?: boolean;
   openTrigger?: number;
   nutritionPlacements: NutritionPlacements;
   onArmFood: (id: string) => void;
@@ -31,19 +33,6 @@ const TYPE_CONFIG: { type: FoodItemType; label: string; icon: string; hasPowder?
   { type: "bar", label: "Barre", icon: "/food/bar.png" },
   { type: "pill", label: "Comprimé", icon: "/food/pill.png" },
 ];
-
-function foodIcon(item: FoodItem): string {
-  if (item.type === "flask") {
-    return item.hasPowder ? "/food/iso.png" : "/food/water.png";
-  }
-  if (item.type === "gel") {
-    return "/food/gel.png";
-  }
-  if (item.type === "bar") {
-    return "/food/bar.png";
-  }
-  return "/food/pill.png";
-}
 
 function MacroBadges({ item }: { item: FoodItem }) {
   const parts: { label: string; color: string }[] = [];
@@ -111,7 +100,7 @@ function FavoriteCard({
           alt=""
           className="h-10 w-10 object-contain drop-shadow-sm"
           height={40}
-          src={foodIcon(item)}
+          src={foodIconSrc(item)}
           width={40}
         />
       </button>
@@ -263,7 +252,7 @@ function LibraryItemRow({
           alt=""
           className="h-7 w-7 shrink-0 object-contain"
           height={28}
-          src={foodIcon(item)}
+          src={foodIconSrc(item)}
           width={28}
         />
         <button
@@ -333,6 +322,7 @@ export function FoodLibrary({
   onArmFood,
   openTrigger = 0,
   disableArm = false,
+  hideTrigger = false,
 }: Props) {
   const [isOpen, setIsOpen] = useState(false);
 
@@ -454,19 +444,21 @@ export function FoodLibrary({
   return (
     <>
       {/* Trigger button */}
-      <button
-        className="flex h-8 items-center gap-1.5 self-start rounded-lg border border-gray-700 bg-gray-800 px-3 font-medium text-gray-300 text-xs transition-colors hover:bg-gray-700"
-        onClick={() => setIsOpen(true)}
-        type="button"
-      >
-        <BookOpen size={13} />
-        Bibliothèque d'aliments
-        {foodLibrary.length > 0 && (
-          <span className="rounded-full bg-gray-700 px-1.5 py-0.5 font-medium text-[11px] text-gray-500 leading-none">
-            {foodLibrary.length}
-          </span>
-        )}
-      </button>
+      {!hideTrigger && (
+        <button
+          className="flex h-8 items-center gap-1.5 self-start rounded-lg border border-gray-700 bg-gray-800 px-3 font-medium text-gray-300 text-xs transition-colors hover:bg-gray-700"
+          onClick={() => setIsOpen(true)}
+          type="button"
+        >
+          <BookOpen size={13} />
+          Bibliothèque d'aliments
+          {foodLibrary.length > 0 && (
+            <span className="rounded-full bg-gray-700 px-1.5 py-0.5 font-medium text-[11px] text-gray-500 leading-none">
+              {foodLibrary.length}
+            </span>
+          )}
+        </button>
+      )}
 
       {/* Drawer */}
       {isOpen && (

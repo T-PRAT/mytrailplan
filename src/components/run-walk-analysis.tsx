@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 import { Slider } from "@/components/ui/slider";
+import { computeElevationBounds } from "../lib/slope-analysis";
 import type { ProfilePoint, Section } from "../types";
 
 interface Props {
@@ -50,14 +51,9 @@ export function RunWalkAnalysis({ sections, profilePoints }: Props) {
   const runPct = totalDist > 0 ? (runDist / totalDist) * 100 : 0;
   const walkPct = 100 - runPct;
 
-  const elevations = profilePoints.map((p) => p.elevation);
-  const rawMin = Math.min(...elevations);
-  const rawMax = Math.max(...elevations);
-  const range = Math.max(rawMax - rawMin, 50);
-  const margin = range * 0.1;
-  const yMin = rawMin - margin;
-  const yMax = rawMax + margin;
-  const yRange = yMax - yMin;
+  const { yMin, yRange } = computeElevationBounds(
+    profilePoints.map((p) => p.elevation),
+  );
 
   function toX(dist: number) {
     return PAD_LEFT + (dist / totalDist) * CHART_W;

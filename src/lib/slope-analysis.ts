@@ -8,6 +8,20 @@ import type {
 import { DOWNHILL_COLORS, UPHILL_COLORS } from "./colors";
 import { haversine } from "./haversine";
 
+export function computeElevationBounds(elevations: number[]): {
+  yMin: number;
+  yMax: number;
+  yRange: number;
+} {
+  const rawMin = Math.min(...elevations);
+  const rawMax = Math.max(...elevations);
+  const range = Math.max(rawMax - rawMin, 50);
+  const margin = range * 0.1;
+  const yMin = rawMin - margin;
+  const yMax = rawMax + margin;
+  return { yMin, yMax, yRange: yMax - yMin };
+}
+
 const SECTION_LENGTH = 100; // meters
 const MIN_TAIL_LENGTH = 10; // meters — discard shorter trailing sections
 

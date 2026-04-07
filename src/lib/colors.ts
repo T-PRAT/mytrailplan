@@ -67,16 +67,3 @@ export function slopeHexDynamic(
   }
   return colors.at(-1) ?? colors[0];
 }
-
-const DEFAULT_THRESHOLDS = [5, 10, 20, 30];
-const DEFAULT_UPHILL = UPHILL_COLORS.map((c) => c.hex);
-const DEFAULT_DOWNHILL = DOWNHILL_COLORS.map((c) => c.hex);
-
-export function slopeHex(slope: number): string {
-  return slopeHexDynamic(
-    slope,
-    DEFAULT_THRESHOLDS,
-    DEFAULT_UPHILL,
-    DEFAULT_DOWNHILL
-  );
-}

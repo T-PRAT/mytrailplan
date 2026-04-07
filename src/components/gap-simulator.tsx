@@ -4,6 +4,9 @@ import { Input } from "@/components/ui/input";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import {
+  DEFAULT_GAP_PACE,
+  PACE_SLIDER_MAX,
+  PACE_SLIDER_MIN,
   detectSegments,
   formatPace,
   formatTime,
@@ -40,9 +43,6 @@ const CHART_W = VIEW_W - PAD_LEFT - PAD_RIGHT;
 const CHART_H = VIEW_H - PAD_TOP - PAD_BOTTOM;
 
 const PACE_LINE_COLOR = "var(--chart-foreground)";
-const DEFAULT_GAP_PACE = 360; // 6:00/km
-const SLIDER_MIN = 180; // 3:00/km
-const SLIDER_MAX = 1200; // 20:00/km
 
 // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: complex by nature
 export function GapSimulator({
@@ -463,15 +463,15 @@ export function GapSimulator({
           </div>
           <Slider
             className="w-full"
-            max={SLIDER_MAX}
-            min={SLIDER_MIN}
+            max={PACE_SLIDER_MAX}
+            min={PACE_SLIDER_MIN}
             onValueChange={(vals) => setSliderPace(vals[0])}
             step={5}
             value={[sliderPace]}
           />
           <div className="flex justify-between text-[11px] text-gray-600">
-            <span>{formatPace(SLIDER_MIN)}/km</span>
-            <span>{formatPace(SLIDER_MAX)}/km</span>
+            <span>{formatPace(PACE_SLIDER_MIN)}/km</span>
+            <span>{formatPace(PACE_SLIDER_MAX)}/km</span>
           </div>
         </div>
       ) : (
