@@ -87,7 +87,7 @@ test.describe("Project Management", () => {
     await page.reload();
 
     // App should show home screen with project list (no active project)
-    await page.getByRole("img", { name: "TrailPrep" }).waitFor();
+    await page.getByRole("img", { name: "MyTrailPlan" }).waitFor();
     await expect(page.getByText("Mes projets")).toBeVisible();
 
     // Click on the project in the home list

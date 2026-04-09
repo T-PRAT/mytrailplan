@@ -144,11 +144,11 @@ export default function App() {
 
   const Logo = () => (
     <svg
-      aria-label="TrailPrep"
+      aria-label="MyTrailPlan"
       height="56"
       role="img"
-      viewBox="0 0 200 56"
-      width="200"
+      viewBox="0 0 230 56"
+      width="230"
       xmlns="http://www.w3.org/2000/svg"
     >
       <defs>
@@ -198,7 +198,7 @@ export default function App() {
         x="78"
         y="30"
       >
-        TrailPrep
+        MyTrailPlan
       </text>
     </svg>
   );
@@ -214,9 +214,9 @@ export default function App() {
         <div className="mx-auto max-w-xl px-4 py-10">
           <div className="mb-8">
             <Logo />
-            <p className="mt-1 text-gray-400 text-sm">
-              Analyse de la distribution des pentes d'une trace GPX
-            </p>
+            <h1 className="mt-1 font-normal text-gray-400 text-sm">
+              Planificateur de ravitaillement et analyse GPX pour le trail running
+            </h1>
           </div>
 
           {projects.length > 0 ? (
@@ -247,7 +247,8 @@ export default function App() {
       {activeProject && result && (
         <div className="flex min-h-screen flex-col">
           {/* Header */}
-          <div className="flex items-center justify-between gap-6 border-gray-800 border-b px-10 py-4">
+          <header className="flex items-center justify-between gap-6 border-gray-800 border-b px-10 py-4">
+            <h1 className="sr-only">MyTrailPlan — Planificateur de course trail</h1>
             <Logo />
             <div className="flex min-w-0 flex-1 flex-col items-center gap-1">
               <div className="flex items-center gap-1.5">
@@ -295,7 +296,7 @@ export default function App() {
             >
               Mes projets
             </button>
-          </div>
+          </header>
 
           {/* Tabs */}
           <Tabs
@@ -303,7 +304,7 @@ export default function App() {
             onValueChange={(v) => setActiveTab(v as Tab)}
             value={activeTab}
           >
-            <div className="border-gray-800 border-b px-10">
+            <nav className="border-gray-800 border-b px-10">
               <TabsList className="h-auto gap-1 rounded-none bg-transparent p-0">
                 {TABS.map((tab) => (
                   <TabsTrigger
@@ -319,9 +320,9 @@ export default function App() {
                   </TabsTrigger>
                 ))}
               </TabsList>
-            </div>
+            </nav>
 
-            <div className="flex flex-col gap-6 px-10 py-6 pb-10">
+            <main className="flex flex-col gap-6 px-10 py-6 pb-10">
               <TabsContent className="mt-0 flex flex-col gap-6" value="pentes">
                 <ElevationProfile
                   profilePoints={result.profilePoints}
@@ -394,7 +395,7 @@ export default function App() {
                   totalDistance={result.totalDistance}
                 />
               </TabsContent>
-            </div>
+            </main>
           </Tabs>
 
           {/* Footer */}

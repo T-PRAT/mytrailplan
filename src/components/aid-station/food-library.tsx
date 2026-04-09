@@ -97,7 +97,7 @@ function FavoriteCard({
         type="button"
       >
         <img
-          alt=""
+          alt={item.name}
           className="h-10 w-10 object-contain drop-shadow-sm"
           height={40}
           src={foodIconSrc(item)}
@@ -153,7 +153,7 @@ function ItemEditArea({
             type="button"
           >
             <img
-              alt=""
+              alt="Eau pure"
               className="h-4 w-4 object-contain"
               height={16}
               src="/food/water.png"
@@ -172,7 +172,7 @@ function ItemEditArea({
             type="button"
           >
             <img
-              alt=""
+              alt="Boisson isotonique"
               className="h-4 w-4 object-contain"
               height={16}
               src="/food/iso.png"
@@ -249,7 +249,7 @@ function LibraryItemRow({
     >
       <div className="group flex cursor-grab items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-gray-800/50 active:cursor-grabbing">
         <img
-          alt=""
+          alt={item.name}
           className="h-7 w-7 shrink-0 object-contain"
           height={28}
           src={foodIconSrc(item)}
@@ -626,7 +626,7 @@ export function FoodLibrary({
                             type="button"
                           >
                             <img
-                              alt=""
+                              alt={label}
                               className="h-5 w-5 object-contain"
                               height={20}
                               src={icon}

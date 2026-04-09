@@ -44,5 +44,5 @@ export async function setupCleanPage(page: Page) {
   await page.goto("/");
   await clearIndexedDB(page);
   await page.reload();
-  await page.getByRole("img", { name: "TrailPrep" }).waitFor();
+  await page.getByRole("img", { name: "MyTrailPlan" }).waitFor();
 }

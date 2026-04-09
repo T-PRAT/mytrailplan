@@ -4,7 +4,10 @@ export type Theme = "light" | "dark";
 
 const STORAGE_KEY = "trailprep-theme";
 
+const isBrowser = typeof window !== "undefined";
+
 function getSystemTheme(): Theme {
+  if (!isBrowser) return "dark";
   return matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
 }
 
@@ -21,6 +24,7 @@ function applyTheme(theme: Theme) {
 
 export function useTheme() {
   const [theme, setThemeState] = useState<Theme>(() => {
+    if (!isBrowser) return "dark";
     const stored = localStorage.getItem(STORAGE_KEY);
     return (stored as Theme | null) ?? getSystemTheme();
   });

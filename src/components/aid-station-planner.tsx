@@ -90,8 +90,9 @@ interface Leg {
 const PAD_LEFT = 16;
 const PAD_RIGHT = 24;
 const PAD_TOP = 30;
-const VIEW_W = 800;
-const CHART_W = VIEW_W - PAD_LEFT - PAD_RIGHT;
+const BASE_VIEW_W = 800;
+const BASE_CHART_W = BASE_VIEW_W - PAD_LEFT - PAD_RIGHT;
+const MIN_SEG_W = 60;
 const CHART_H = 72;
 const FOOD_LANE_H = 44;
 const FOOD_ICON_SIZE = 22;
@@ -404,6 +405,25 @@ export function AidStationPlanner({
 			return { ...leg, cumulativeTime: cum };
 		});
 	}, [legs, timeOverrides, aidStations]);
+
+	// --- Zoom horizontal : garantir un minimum de pixels par segment ---
+	const MAX_CHART_W = BASE_CHART_W * 6;
+	const { VIEW_W, CHART_W } = useMemo(() => {
+		if (effectiveLegs.length <= 1 || totalDistance === 0) {
+			return { VIEW_W: BASE_VIEW_W, CHART_W: BASE_CHART_W };
+		}
+		let smallest = 1;
+		for (const l of effectiveLegs) {
+			const frac = l.distance / totalDistance;
+			if (frac > 0 && frac < smallest) smallest = frac;
+		}
+		const neededChartW = MIN_SEG_W / smallest;
+		if (neededChartW <= BASE_CHART_W) {
+			return { VIEW_W: BASE_VIEW_W, CHART_W: BASE_CHART_W };
+		}
+		const chartW = Math.min(Math.ceil(neededChartW), MAX_CHART_W);
+		return { VIEW_W: chartW + PAD_LEFT + PAD_RIGHT, CHART_W: chartW };
+	}, [effectiveLegs, totalDistance]);
 
 	// --- Coordinate helpers ---
 	const elevations = profilePoints.map((p) => p.elevation);
@@ -1212,6 +1232,7 @@ export function AidStationPlanner({
 					className="relative"
 					data-print-section="chart"
 					{...(!printOptions.chart ? { "data-print-hide": "" } : {})}
+					style={VIEW_W > BASE_VIEW_W ? { overflowX: "auto" } : undefined}
 					onDragLeave={
 						nutritionMode === "advanced"
 							? (e) => {
@@ -1262,6 +1283,8 @@ export function AidStationPlanner({
 					ref={svgContainerRef}
 					role="application"
 				>
+					{/* Inner wrapper for scroll content */}
+					<div className="relative" style={VIEW_W > BASE_VIEW_W ? { minWidth: `${(VIEW_W / BASE_VIEW_W) * 100}%` } : undefined}>
 					{/* Popover d'édition d'un ravito */}
 					{editingStationId &&
 						(() => {
@@ -1433,7 +1456,7 @@ export function AidStationPlanner({
 												</text>
 											)}
 											{/* Distance + D+/D- */}
-											{w > 72 && (
+											{w > 120 && (
 												<text
 													fill="#5a5a56"
 													fontSize={8.5}
@@ -1442,10 +1465,32 @@ export function AidStationPlanner({
 													x={x1 + w / 2}
 													y={STATS_LANE_Y + 23}
 												>
-													{(leg.distance / 1000).toFixed(1)} km · +
-													{Math.round(leg.elevGain)} / −
-													{Math.round(leg.elevLoss)} m
+													{(leg.distance / 1000).toFixed(1)} km · +{Math.round(leg.elevGain)} / −{Math.round(leg.elevLoss)} m
 												</text>
+											)}
+											{w > 40 && w <= 120 && (
+												<>
+													<text
+														fill="#5a5a56"
+														fontSize={7.5}
+														style={{ pointerEvents: "none" }}
+														textAnchor="middle"
+														x={x1 + w / 2}
+														y={STATS_LANE_Y + 22}
+													>
+														{(leg.distance / 1000).toFixed(1)} km
+													</text>
+													<text
+														fill="#5a5a56"
+														fontSize={7}
+														style={{ pointerEvents: "none" }}
+														textAnchor="middle"
+														x={x1 + w / 2}
+														y={STATS_LANE_Y + 30}
+													>
+														+{Math.round(leg.elevGain)} / −{Math.round(leg.elevLoss)}
+													</text>
+												</>
 											)}
 											{/* Icônes aliments du tronçon */}
 											{w > 72 &&
@@ -2380,6 +2425,7 @@ export function AidStationPlanner({
 							Cliquer sur un tronçon pour ajuster le temps et la nutrition
 						</p>
 					)}
+					</div>
 				</div>
 
 				{/* Bibliothèque + favoris + indicateur armé — sous le graphique (mode avancé) */}
@@ -2628,7 +2674,7 @@ export function AidStationPlanner({
 														key={item.id}
 													>
 														<img
-															alt=""
+															alt={item.name}
 															className="h-5 w-5 object-contain"
 															height={20}
 															src={foodIconSrc(item)}
@@ -3141,7 +3187,7 @@ export function AidStationPlanner({
 																	key={p.id}
 																>
 																	<img
-																		alt=""
+																		alt={item.name}
 																		className="h-6 w-6 object-contain"
 																		height={24}
 																		src={foodIconSrc(item)}

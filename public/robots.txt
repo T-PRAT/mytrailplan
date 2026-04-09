@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://mytrailplan.com/sitemap.xml
